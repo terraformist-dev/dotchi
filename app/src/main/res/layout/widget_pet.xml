@@ -7,13 +7,59 @@
     android:orientation="vertical"
     android:padding="10dp">
 
-    <ImageView
+    <!-- Six pre-drawn frames that the home screen flips through on its own,
+         so the pet bounces and blinks without the app having to run. -->
+    <ViewFlipper
         android:id="@+id/pet"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:contentDescription="@string/app_name"
-        android:scaleType="fitCenter" />
+        android:autoStart="true"
+        android:flipInterval="500">
+
+        <ImageView
+            android:id="@+id/pet_0"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/app_name"
+            android:scaleType="fitCenter" />
+
+        <ImageView
+            android:id="@+id/pet_1"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/app_name"
+            android:scaleType="fitCenter" />
+
+        <ImageView
+            android:id="@+id/pet_2"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/app_name"
+            android:scaleType="fitCenter" />
+
+        <ImageView
+            android:id="@+id/pet_3"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/app_name"
+            android:scaleType="fitCenter" />
+
+        <ImageView
+            android:id="@+id/pet_4"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/app_name"
+            android:scaleType="fitCenter" />
+
+        <ImageView
+            android:id="@+id/pet_5"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/app_name"
+            android:scaleType="fitCenter" />
+
+    </ViewFlipper>
 
     <LinearLayout
         android:layout_width="match_parent"

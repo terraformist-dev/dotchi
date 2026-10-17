@@ -32,10 +32,11 @@ private object Art {
             "#########",
             "#########",
             "#########",
+            "#########",
             ".#######.",
             "..##.##..",
         ),
-        eyeLeftX = 2, eyeRightX = 6, eyeY = 2, eyeWidth = 1, mouthX = 4, mouthY = 4,
+        eyeLeftX = 2, eyeRightX = 6, eyeY = 2, eyeWidth = 1, mouthX = 4, mouthY = 5,
     )
 
     val CHILD = Body(
@@ -52,7 +53,7 @@ private object Art {
             "..#######..",
             "..##...##..",
         ),
-        eyeLeftX = 3, eyeRightX = 7, eyeY = 4, eyeWidth = 1, mouthX = 5, mouthY = 6,
+        eyeLeftX = 3, eyeRightX = 7, eyeY = 4, eyeWidth = 1, mouthX = 5, mouthY = 7,
     )
 
     val ADULT = Body(
@@ -140,6 +141,8 @@ object PetScene {
      * @param animate false for a still picture (widget, always-on display).
      * @param selected the action picked with the Glyph Button but not done yet.
      * @param selectProgress 0..1, how far through the "wait to confirm" countdown.
+     * @param anim the clock used for animation (bounce, blink). Defaults to [now]; the widget
+     *   passes made-up times to pre-draw a short looping animation.
      */
     fun render(
         state: PetState,
@@ -147,6 +150,7 @@ object PetScene {
         animate: Boolean,
         selected: Action? = null,
         selectProgress: Float = 0f,
+        anim: Long = now,
     ): DotGrid {
         val g = DotGrid(SIZE, SIZE)
         val mood = state.mood(now)
@@ -155,13 +159,13 @@ object PetScene {
         drawGround(g)
 
         if (stage == Stage.EGG) {
-            drawEgg(g, state, now, animate)
+            drawEgg(g, state, now, anim, animate)
         } else {
-            drawPoops(g, state.poops, now, animate)
-            drawPet(g, stage, mood, now, animate)
+            drawPoops(g, state.poops, anim, animate)
+            drawPet(g, stage, mood, anim, animate)
         }
 
-        drawTop(g, state, mood, now, animate, selected, selectProgress)
+        drawTop(g, state, mood, anim, animate, selected, selectProgress)
 
         // Anything outside the real matrix shape stays dark.
         for (y in 0 until SIZE) for (x in 0 until SIZE) {
@@ -174,11 +178,11 @@ object PetScene {
         for (x in 3..21 step 2) g.set(x, GROUND_Y, 40)
     }
 
-    private fun drawEgg(g: DotGrid, state: PetState, now: Long, animate: Boolean) {
+    private fun drawEgg(g: DotGrid, state: PetState, now: Long, anim: Long, animate: Boolean) {
         val egg = Art.EGG
         val age = now - state.bornAt
         val nearlyHatched = age > PetState.EGG_MS * 6 / 10
-        val wobble = if (animate && nearlyHatched) intArrayOf(0, 1, 0, -1)[((now / 200) % 4).toInt()] else 0
+        val wobble = if (animate && nearlyHatched) intArrayOf(0, 1, 0, -1)[((anim / 200) % 4).toInt()] else 0
         val left = CENTER_X - egg.width / 2 + wobble
         val top = FEET_Y - egg.height + 1
         g.stamp(egg, left, top)

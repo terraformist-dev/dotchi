@@ -40,6 +40,11 @@ class PetWidgetProvider : AppWidgetProvider() {
         private const val ACTION_PET = "dev.terraformist.glyphpet.PET_ACTION"
         private const val EXTRA_ACTION = "action"
 
+        private val FRAME_IDS = intArrayOf(R.id.pet_0, R.id.pet_1, R.id.pet_2, R.id.pet_3, R.id.pet_4, R.id.pet_5)
+
+        // Animation moments for the six frames: down, up, down, up, down, up-with-a-blink.
+        private val FRAME_TIMES = longArrayOf(200L, 700L, 1200L, 1700L, 2200L, 6800L)
+
         /** Redraw every copy of the widget on the home screen. */
         fun refreshAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -50,13 +55,18 @@ class PetWidgetProvider : AppWidgetProvider() {
         private fun draw(context: Context, manager: AppWidgetManager, ids: IntArray) {
             val now = System.currentTimeMillis()
             val state = PetStore.get(context, now)
-            val petBitmap = DotPainter.paintPet(PetScene.render(state, now, animate = false), pitch = 14)
+            // Pre-draw a short loop; the home screen flips through it every 500ms.
+            val frames = FRAME_TIMES.map { t ->
+                DotPainter.paintPet(PetScene.render(state, now, animate = true, anim = t), pitch = 12)
+            }
             val need = state.mostNeeded()
 
             for (id in ids) {
                 val views = RemoteViews(context.packageName, R.layout.widget_pet)
-                views.setImageViewBitmap(R.id.pet, petBitmap)
-                views.setOnClickPendingIntent(R.id.pet, openApp(context))
+                FRAME_IDS.forEachIndexed { i, viewId ->
+                    views.setImageViewBitmap(viewId, frames[i])
+                    views.setOnClickPendingIntent(viewId, openApp(context))
+                }
 
                 bindButton(context, views, R.id.btn_feed, Action.FEED, "FEED", state, need)
                 bindButton(context, views, R.id.btn_play, Action.PLAY, "PLAY", state, need)
