@@ -61,8 +61,21 @@ object PetStore {
         var (s, dirty) = current(context, now)
         if (checkNapNow || now - lastNapCheck > NAP_CHECK_EVERY_MS) {
             lastNapCheck = now
-            // Just woken up: no new nap for a while, even if it's still dark or charging.
-            val wanted = if (s.recentlyWoken(now)) null else Senses.napReason(context, s.nap, now)
+            val p = prefs(context)
+            val charging = Senses.isCharging(context)
+            val justPluggedIn = charging && !p.getBoolean("wasCharging", false)
+            if (charging != p.getBoolean("wasCharging", false)) p.edit().putBoolean("wasCharging", charging).apply()
+            var wanted = Senses.napReason(context, s.nap, now)
+            if (s.recentlyWoken(now)) {
+                if (justPluggedIn && wanted == Nap.CHARGING) {
+                    // Plugging in is a clear "time for a nap", even just after waking it.
+                    s = s.copy(wokenAt = 0L)
+                    dirty = true
+                } else {
+                    // Just woken up (e.g. shaken awake on the charger): stays awake for a while.
+                    wanted = null
+                }
+            }
             if (wanted != s.nap) {
                 // Lights on or unplugged: wake up properly (with the stretch), not just stop napping.
                 s = if (wanted == null) s.wake(now) else s.withNap(wanted, now)
@@ -105,6 +118,11 @@ object PetStore {
     fun walked(context: Context, steps: Int, live: Boolean, now: Long = System.currentTimeMillis()) {
         val s = update(context, now, refresh = false) { it.walked(steps, now, live) }
         Album.noteSteps(context, steps, s.stepsOn(now))
+    }
+
+    /** Forget today's step count (used once, after the step-counting fix). */
+    fun clearTodaysSteps(context: Context, now: Long = System.currentTimeMillis()) {
+        update(context, now) { it.copy(stepsToday = 0) }
     }
 
     /** Met a friend's pet for the first time today. */

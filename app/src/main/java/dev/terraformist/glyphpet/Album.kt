@@ -65,6 +65,10 @@ object Album {
             .apply()
     }
 
+    fun clearSteps(context: Context) {
+        prefs(context).edit().remove("totalSteps").remove("bestDay").apply()
+    }
+
     fun totalSteps(context: Context): Long = prefs(context).getLong("totalSteps", 0L)
     fun bestDay(context: Context): Int = prefs(context).getInt("bestDay", 0)
 }

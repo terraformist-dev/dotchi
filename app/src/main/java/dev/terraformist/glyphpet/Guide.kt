@@ -70,13 +70,15 @@ object Guide {
             "It sleeps from 11pm to 7am and needs much less looking after overnight. You'll see " +
                 "little Zs above it.\n\nIt also naps during the day:\n\nWhen it's dark, like a dark room " +
                 "or your pocket, it dozes off. When the lights come back on, it wakes up by itself. While " +
-                "napping its needs build up more slowly.\n\nWhen your phone is charging, it naps on the " +
-                "charger, shown by a little lightning bolt. Charging naps slowly cheer it up. It wakes " +
-                "when you unplug.\n\nFeeding, cleaning or playing with it wakes it for a minute. Shaking " +
-                "it wakes it for about 15 minutes.\n\nThe light sensor is on the screen side of the " +
-                "phone, so it can't see the light while the phone is face-down. If it's napping and the " +
-                "phone is face-down, shake it or flip it over and back to wake it.\n\nThe widget only " +
-                "refreshes about every half hour, so a nap can take a little while to show there.",
+                "napping its needs build up more slowly.\n\nWhen you plug your phone in to charge, it " +
+                "naps on the charger, shown by a little lightning bolt. Charging naps slowly cheer it up. " +
+                "It wakes when you unplug. Plugging in always starts a charging nap, even if you've only " +
+                "just woken it.\n\nFeeding, cleaning or playing with it wakes it for a minute. Shaking it " +
+                "wakes it for about 15 minutes, even on the charger.\n\nThe light sensor is on the screen " +
+                "side of the phone, so it can't see the light while the phone is face-down. If it's " +
+                "napping and the phone is face-down, shake it or flip it over and back to wake it.\n\nThe " +
+                "widget only refreshes about every half hour, so a nap can take a little while to show " +
+                "there.",
         ),
         Section(
             "DAYCARE",
@@ -90,9 +92,12 @@ object Guide {
                 "and makes it a bit hungry, so keep an eye on FEED.\n\nWalk 5,000 steps in a day for a " +
                 "treat: a big boost of happiness and a little celebration.\n\nWhile you're walking and " +
                 "it's on screen, it trots along as the ground slides past. Today's steps are shown under " +
-                "its name on the pet screen.\n\nWalks use your phone's step counter. The app asks for " +
-                "permission the first time you open it. If you said no, you can turn on Physical activity " +
-                "for Glyph Pet in your phone's Settings, under Apps.",
+                "its name on the pet screen.\n\nSteps come from your phone's own step counter, so they " +
+                "only count while the phone is with you, and they won't exactly match a watch or fitness " +
+                "band. Vigorous shaking (or the tilt games) can count a few steps too.\n\nWalks use your " +
+                "phone's step counter. The app asks for permission the first time you open it. If you " +
+                "said no, you can turn on Physical activity for Glyph Pet in your phone's Settings, under " +
+                "Apps.",
         ),
         Section(
             "WEATHER",

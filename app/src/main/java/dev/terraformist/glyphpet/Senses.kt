@@ -216,6 +216,10 @@ class PetSensors(
 /**
  * Turns the phone's step counter (a running total since the phone was switched on) into
  * "steps since we last looked", and passes them to the pet in small batches.
+ *
+ * Guarded against glitches: if the total ever goes backwards without the phone having
+ * restarted, or jumps by more than anyone could walk in the time since the last reading,
+ * we just take the new total as the starting point and add nothing.
  */
 object Steps {
     private const val PREFS = "steps"
@@ -224,17 +228,40 @@ object Steps {
     /** A jump bigger than this means steps added up while nothing was watching: no walking animation. */
     private const val LIVE_MAX = 200
 
+    /** Fastest believable pace (a brisk run), plus a little slack for batching. */
+    private const val MAX_STEPS_PER_SECOND = 3.5f
+    private const val SLACK_STEPS = 60
+
     private var pending = 0
     private var lastFlush = 0L
 
     fun onCounter(context: Context, total: Float, now: Long = System.currentTimeMillis()) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val last = prefs.getFloat("lastTotal", -1f)
-        prefs.edit().putFloat("lastTotal", total).apply()
+        val lastAt = prefs.getLong("lastTotalAt", 0L)        // wall-clock time of that reading
+        val lastBoot = prefs.getLong("lastBootAt", 0L)       // when the phone last started, as of then
+        val bootAt = now - android.os.SystemClock.elapsedRealtime()
+        prefs.edit()
+            .putFloat("lastTotal", total)
+            .putLong("lastTotalAt", now)
+            .putLong("lastBootAt", bootAt)
+            .apply()
         if (last < 0f) return // first reading ever: nothing to compare with yet
-        // The total restarts from zero when the phone restarts.
-        val delta = if (total >= last) (total - last).toInt() else total.toInt()
+
+        // A restart moves the boot time forward by more than a few seconds of clock drift.
+        val restarted = lastBoot > 0L && bootAt - lastBoot > 60_000L
+        val delta = when {
+            restarted -> total.toInt()      // counting from zero since the restart
+            total >= last -> (total - last).toInt()
+            else -> 0                       // went backwards without a restart: a glitch, ignore
+        }
         if (delta <= 0) return
+
+        // Could anyone really have walked that many steps since the last reading?
+        val since = if (restarted) android.os.SystemClock.elapsedRealtime() else now - lastAt
+        val believable = (since / 1000f * MAX_STEPS_PER_SECOND).toInt() + SLACK_STEPS
+        if (lastAt > 0L && delta > believable) return
+
         if (delta > LIVE_MAX) {
             flush(context, now)
             PetStore.walked(context, delta, live = false, now = now)
@@ -250,5 +277,18 @@ object Steps {
         val steps = pending
         pending = 0
         PetStore.walked(context, steps, live = true, now = now)
+    }
+
+    /**
+     * Build 10 fixed step counting. Wipe the counts made before the fix (today's steps and the
+     * Album's totals) once, so everything from now on is clean.
+     */
+    fun resetOnceAfterFix(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean("resetAfterFix10", false)) return
+        prefs.edit().putBoolean("resetAfterFix10", true).apply()
+        pending = 0
+        PetStore.clearTodaysSteps(context)
+        Album.clearSteps(context)
     }
 }

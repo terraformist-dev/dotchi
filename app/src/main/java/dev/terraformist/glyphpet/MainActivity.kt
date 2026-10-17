@@ -93,6 +93,7 @@ class MainActivity : Activity() {
 
         askForPermissionsOnce()
         removeOldLockScreenCard()
+        Steps.resetOnceAfterFix(this)
     }
 
     // ---- Naming -------------------------------------------------------------------------
