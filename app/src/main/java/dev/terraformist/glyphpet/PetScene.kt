@@ -593,6 +593,7 @@ object PetScene {
             Mood.EATING -> ((anim / 250) % 2).toInt()
             Mood.SAD -> if ((anim / 1400) % 2 == 0L) 0 else 1
             Mood.WALKING -> ((anim / 250) % 2).toInt()
+            Mood.STUFFED -> if ((anim / 400) % 2 == 0L) 0 else 1
             Mood.WAKING -> if (wakingJump) intArrayOf(3, 2, 1, 0, 0, 0)[(((waking - 0.3f) / 0.7f) * 6).toInt().coerceIn(0, 5)] else 0
             else -> 0
         }
@@ -601,6 +602,8 @@ object PetScene {
         // Playing: dash from side to side as well as hopping.
         val dash = if (animate && mood == Mood.PLAYING) intArrayOf(0, 2, 3, 2, 0, -2, -3, -2)[((anim / 150) % 8).toInt()] else 0
         val wriggle = if (animate && wakingWriggle) (if ((anim / 90) % 2 == 0L) -1 else 1) else 0
+        // Turning down a game: shakes its head (eyes and mouth swing side to side).
+        val headShake = if (mood == Mood.REFUSING) (if (!animate || (anim / 200) % 2 == 0L) -1 else 1) else 0
         val left = centerX - sprite.width / 2 + shiver + dash + wriggle
         val top = feetY - sprite.height + 1 - lift
         val level = when {
@@ -615,8 +618,9 @@ object PetScene {
         val ey = top + body.eyeY
         val blink = animate && (anim % 3400) < 160
         val eyesClosed = mood == Mood.SLEEPING || mood == Mood.PLAYING || mood == Mood.SICK ||
-            mood == Mood.MEDICATED || wakingWriggle || (blink && mood != Mood.WAKING)
-        for (ex in listOf(left + body.eyeLeftX + look, left + body.eyeRightX + look)) {
+            mood == Mood.MEDICATED || mood == Mood.STUFFED || wakingWriggle || (blink && mood != Mood.WAKING)
+        val turn = look + headShake
+        for (ex in listOf(left + body.eyeLeftX + turn, left + body.eyeRightX + turn)) {
             for (dx in 0 until body.eyeWidth) {
                 if (eyesClosed) {
                     g.carve(ex + dx, ey + 1)
@@ -646,12 +650,13 @@ object PetScene {
         }
 
         // Mouth
-        val mx = left + body.mouthX + look
+        val mx = left + body.mouthX + turn
         val my = top + body.mouthY
         when (mood) {
             Mood.HAPPY, Mood.PLAYING, Mood.CLEANING, Mood.WALKING, Mood.GROWING -> smile(g, mx, my)
             Mood.WAKING -> if (wakingWriggle) flat(g, mx, my) else openMouth(g, mx, my)
-            Mood.SAD, Mood.SICK -> frown(g, mx, my)
+            Mood.SAD, Mood.SICK, Mood.REFUSING -> frown(g, mx, my)
+            Mood.STUFFED -> flat(g, mx, my)
             Mood.EATING -> if (!animate || (anim / 250) % 2 == 0L) openMouth(g, mx, my) else flat(g, mx, my)
             Mood.SLEEPING -> g.carve(mx, my + 1)
             else -> flat(g, mx, my)
@@ -707,6 +712,8 @@ object PetScene {
             Mood.PLAYING -> g.stamp(Art.HEART, iconX, iconY + 1, red = true)
             Mood.EATING -> g.stamp(Art.FOOD, iconX, iconY, level = 120)
             Mood.MEDICATED -> g.stamp(Art.PILL, iconX, iconY, level = 120)
+            Mood.STUFFED -> g.stamp(Art.FOOD, iconX, iconY, level = 70)
+            Mood.REFUSING -> g.stamp(Art.PLAY, iconX, iconY, level = 70)
             Mood.WAKING -> g.text("!", 11, iconY)
             Mood.CLEANING -> {
                 val flip = animate && (anim / 300) % 2 == 0L

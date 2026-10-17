@@ -32,10 +32,10 @@ object Guide {
         ),
         Section(
             "THE BUTTONS",
-            "FEED fills its tummy.\n\nPLAY opens up some minigames. Playing makes it happier, and " +
-                "winning makes it much happier.\n\nCLEAN tidies up its mess. It needs the toilet every " +
-                "few hours.\n\nUnder the buttons: GUIDE (this page), ALBUM (your keepsakes) and MEET " +
-                "(visit a friend’s pet).",
+            "FEED fills its tummy. Try not to overdo it!\n\nPLAY opens up some minigames. Playing " +
+                "makes it happier, and winning makes it much happier.\n\nCLEAN tidies up its mess. It " +
+                "needs the toilet every few hours.\n\nUnder the buttons: GUIDE (this page), ALBUM (your " +
+                "keepsakes) and MEET (visit a friend’s pet).",
         ),
         Section(
             "READING THE SIGNS",
@@ -47,6 +47,16 @@ object Guide {
             "If mess is left lying around or it goes hungry for too long, it falls ill. An ill Dotchi " +
                 "gets unhappy faster, and doesn't want to play.\n\nTap MEDS to give it some medicine. It " +
                 "won’t enjoy the taste, but it’ll be fine.",
+        ),
+        Section(
+            "TOO MUCH OF A GOOD THING",
+            "Dotchi loves its food and its games, but it doesn't always know when to stop.\n\nIf you " +
+                "keep feeding it when its tummy is already full (all five dots lit up), it'll still eat, " +
+                "but it won't feel great afterwards. Expect a bit of a tummy ache, and a bigger mess to " +
+                "clean up not long after.\n\nPlay is the same. After lots of games in a short space of " +
+                "time, Dotchi gets played out and needs a rest. While it's resting, the PLAY button looks " +
+                "faded, and if you try to play anyway it'll just shake its head. Give it 45 minutes or so " +
+                "and it'll be ready for more.",
         ),
         Section(
             "SLEEP AND NAPS",
@@ -61,9 +71,9 @@ object Guide {
         Section(
             "SHAKING",
             "Give your phone a good shake (three firm shakes in about a second).\n\nIf your Dotchi is " +
-                "awake, it enjoys a quick game of chase.\n\nIf it’s asleep or napping, a shake wakes it " +
-                "up instead. If it's taking a charger nap, it stays awake for about 15 minutes before " +
-                "snuggling back up to the charge.",
+                "awake, it enjoys a quick game of chase (unless it's played out, in which case it shakes " +
+                "its head).\n\nIf it’s asleep or napping, a shake wakes it up instead. If it's taking a " +
+                "charger nap, it stays awake for about 15 minutes before snuggling back up to the charge.",
         ),
         Section(
             "DAYCARE",
@@ -151,9 +161,8 @@ object Guide {
             "Want a gentle reminder of your Dotchi's needs? Switch on Glyph nudges below. When your " +
                 "Dotchi needs something and your phone is lying face-down, what it needs blinks on the " +
                 "Glyph Matrix for a few seconds. If it's happy, you won't see anything, and you'll never " +
-                "get more than one nudge an hour.\n\nNudges " +
-                "stay quiet at night, at daycare, and while Dotchi is already showing on the back of your " +
-                "phone.",
+                "get more than one nudge an hour.\n\nNudges stay quiet at night, at daycare, and while " +
+                "Dotchi is already showing on the back of your phone.",
         ),
         Section(
             "STARTING OVER",

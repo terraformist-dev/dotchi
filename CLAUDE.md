@@ -72,3 +72,4 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   `PetWidgetProvider` (action NUDGE); blinks the need icon via `setAppMatrixFrame` when face-down.
 - Hello wave (toy picked / flipped face-down) only when the pet is awake: not egg, not `isAsleep` (night or nap). It never wakes the pet.
 - Widget refresh: non-wakeup repeating alarm every 60s (`PetWidgetProvider.keepTicking`), so it ticks while the phone is awake and fires on screen-on; plus the 30-minute `updatePeriodMillis`.
+- Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). 5 plays within 30 min -> played out for 45 min (`playedOutUntil`): play attempts are refused with a head shake (REFUSING), PLAY label faded.

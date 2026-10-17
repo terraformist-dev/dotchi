@@ -8,7 +8,7 @@ enum class Stage { EGG, BABY, CHILD, ADULT }
 /** MEDICINE is only offered while the pet is ill (it takes Play's place). */
 enum class Action { FEED, PLAY, CLEAN, MEDICINE }
 
-enum class Mood { EGG, GROWING, SICK, SLEEPING, WAKING, WALKING, HAPPY, OK, SAD, EATING, PLAYING, CLEANING, MEDICATED }
+enum class Mood { STUFFED, REFUSING, EGG, GROWING, SICK, SLEEPING, WAKING, WALKING, HAPPY, OK, SAD, EATING, PLAYING, CLEANING, MEDICATED }
 
 /** Weather that changes how the pet feels (from [Weather], passed in so this file stays plain Kotlin). */
 data class Climate(val rainy: Boolean, val snowy: Boolean, val hot: Boolean)
@@ -74,6 +74,13 @@ data class PetState(
     val farewellGen: Int = 0,
     val daycareUntil: Long = 0L,
     val daycareDay: Long = -1L,  // the day daycare was last used (once a day)
+    // Too much of a good thing:
+    val overfedAt: Long = 0L,     // last time it was fed while already full
+    val extraMess: Int = 0,       // extra mess its upset tummy will add next time it goes
+    val playCount: Int = 0,       // plays in the current burst...
+    val playBurstStart: Long = 0L, // ...which started here
+    val playedOutUntil: Long = 0L, // won't play again until then
+    val refusedAt: Long = 0L,     // last time it turned down a game
 ) {
 
     fun stage(now: Long): Stage {
@@ -104,9 +111,10 @@ data class PetState(
     fun mood(now: Long): Mood {
         if (isGrowing(now)) return Mood.GROWING
         if (stage(now) == Stage.EGG) return Mood.EGG
+        if (refusedAt > 0L && now - refusedAt in 0L until REACT_MS) return Mood.REFUSING
         if (isReacting(now)) {
             return when (lastAction) {
-                Action.FEED -> Mood.EATING
+                Action.FEED -> if (overfedAt == lastActionAt) Mood.STUFFED else Mood.EATING
                 Action.PLAY -> Mood.PLAYING
                 Action.MEDICINE -> Mood.MEDICATED
                 else -> Mood.CLEANING
@@ -120,6 +128,12 @@ data class PetState(
         if (food >= HIGH && joy >= HIGH && poops == 0) return Mood.HAPPY
         return Mood.OK
     }
+
+    /** Had lots of play recently and wants a break from it. */
+    fun isPlayedOut(now: Long): Boolean = now < playedOutUntil
+
+    /** Shakes its head at a game (because it's played out). */
+    fun refusePlay(now: Long): PetState = copy(refusedAt = now)
 
     /** Asleep for the night or napping, and not just woken up or out for a walk. */
     fun isAsleep(now: Long): Boolean =
@@ -282,6 +296,7 @@ data class PetState(
         var joy = joy
         var poops = poops
         var nextPoop = nextPoopAt
+        var extraMess = extraMess
         var sick = sick
         var sickRisk = sickRiskMs
         var neglect = neglectMs
@@ -332,7 +347,9 @@ data class PetState(
                         // Hold it until morning.
                         nextPoop = end + 30 * MINUTE_MS
                     } else {
-                        if (poops < MAX_POOPS) poops++
+                        // An upset tummy (from overeating) makes a bigger mess.
+                        poops = (poops + 1 + extraMess).coerceAtMost(MAX_POOPS)
+                        extraMess = 0
                         nextPoop = end + POOP_EVERY_MS
                     }
                 }
@@ -381,6 +398,7 @@ data class PetState(
             joy = joy.coerceIn(0f, 100f),
             poops = poops,
             nextPoopAt = nextPoop,
+            extraMess = extraMess,
             sick = sick,
             sickRiskMs = sickRisk,
             neglectMs = neglect,
@@ -393,9 +411,18 @@ data class PetState(
     fun apply(action: Action, now: Long): PetState {
         if (stage(now) == Stage.EGG) return this
         return when (action) {
-            Action.FEED -> copy(
+            Action.FEED -> if (food >= FULL) {
+                // Already full: it eats anyway, gets an upset tummy, and will make extra mess soon.
+                copy(
+                    joy = (joy - 5f).coerceAtLeast(0f),
+                    nextPoopAt = minOf(nextPoopAt, now + UPSET_TUMMY_MS),
+                    extraMess = (extraMess + 1).coerceAtMost(MAX_POOPS),
+                    overfedAt = now,
+                    lastAction = action,
+                    lastActionAt = now,
+                )
+            } else copy(
                 food = (food + 35f).coerceAtMost(100f),
-                joy = if (food >= 95f) (joy - 5f).coerceAtLeast(0f) else joy,
                 nextPoopAt = minOf(nextPoopAt, now + 90 * MINUTE_MS),
                 lastAction = action,
                 lastActionAt = now,
@@ -432,11 +459,19 @@ data class PetState(
     /** After a mini-game (or a quick play on the Glyph Matrix). Ill pets can't play. */
     fun played(won: Boolean, now: Long, boost: Float = if (won) 40f else 15f): PetState {
         if (stage(now) == Stage.EGG || sick) return this
+        if (isPlayedOut(now)) return refusePlay(now)
+        // Count plays in a burst; too many in a short time and it needs a break afterwards.
+        val newBurst = now - playBurstStart > PLAY_BURST_MS
+        val count = if (newBurst) 1 else playCount + 1
+        val tired = count >= PLAYS_BEFORE_BREAK
         return copy(
             joy = (joy + boost).coerceAtMost(100f),
             food = (food - 5f).coerceAtLeast(0f),
             lastAction = Action.PLAY,
             lastActionAt = now,
+            playCount = if (tired) 0 else count,
+            playBurstStart = if (newBurst) now else playBurstStart,
+            playedOutUntil = if (tired) now + PLAY_BREAK_MS else playedOutUntil,
         )
     }
 
@@ -467,6 +502,15 @@ data class PetState(
         const val STEP_GOAL_JOY = 15f
         const val WALKING_SHOW_MS = 15_000L
         const val FRIEND_JOY = 20f
+
+        /** Feeding at or above this (all five FEED dots) counts as overeating. */
+        const val FULL = 90f
+        /** After overeating, the next mess comes this soon. */
+        const val UPSET_TUMMY_MS = 20 * MINUTE_MS
+        /** Five plays within half an hour, and it wants a 45-minute break from playing. */
+        const val PLAYS_BEFORE_BREAK = 5
+        const val PLAY_BURST_MS = 30 * MINUTE_MS
+        const val PLAY_BREAK_MS = 45 * MINUTE_MS
 
         const val GROW_MS = 3_200L
         const val FAREWELL_MS = 6_000L

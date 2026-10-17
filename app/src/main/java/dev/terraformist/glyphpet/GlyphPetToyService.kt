@@ -338,7 +338,7 @@ class GlyphPetToyService : Service() {
         if (now - selectedAt >= CONFIRM_AFTER_MS) {
             selected = null
             val state = PetStore.get(applicationContext, now)
-            if (action == Action.PLAY && !state.sick && state.stage(now) != Stage.EGG) {
+            if (action == Action.PLAY && !state.sick && state.stage(now) != Stage.EGG && !state.isPlayedOut(now)) {
                 // Play on the Glyph Matrix: a tilt game, taking turns between Catch and Roll.
                 game = if (nextGameIsCatch) CatchGame(now) else RollGame(now)
                 nextGameIsCatch = !nextGameIsCatch

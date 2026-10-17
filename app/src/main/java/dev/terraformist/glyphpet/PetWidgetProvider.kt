@@ -172,17 +172,27 @@ class PetWidgetProvider : AppWidgetProvider() {
             if (action == Action.MEDICINE) {
                 buttonBitmap(label(action), 5, highlight = true, alarm = true)
             } else {
-                buttonBitmap(label(action), state.level(action), highlight = state.mostNeeded() == action)
+                buttonBitmap(
+                    label(action), state.level(action), highlight = state.mostNeeded() == action,
+                    faded = action == Action.PLAY && state.isPlayedOut(System.currentTimeMillis()),
+                )
             }
 
         /**
          * A dot-matrix label with a 5-dot meter under it.
          * [alarm] lights the whole meter red (used for Medicine).
          */
-        fun buttonBitmap(label: String, level: Int, highlight: Boolean, alarm: Boolean = false): Bitmap {
+        fun buttonBitmap(
+            label: String,
+            level: Int,
+            highlight: Boolean,
+            alarm: Boolean = false,
+            faded: Boolean = false,
+        ): Bitmap {
             val g = DotGrid(21, 9)
             val textX = (g.width - DotFont.width(label)) / 2
-            g.text(label, textX, 0, red = highlight)
+            // Faded: resting from that (e.g. played out), so the label is dimmed.
+            g.text(label, textX, 0, level = if (faded) 80 else 255, red = highlight && !faded)
             val meterX = (g.width - 9) / 2
             for (i in 0 until 5) {
                 val lit = i < level

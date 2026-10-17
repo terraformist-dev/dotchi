@@ -144,6 +144,10 @@ object PetStore {
         return update(context, now) { it.played(won, now, boost = (if (won) 40f else 15f) * factor) }
     }
 
+    /** It turns down a game because it's played out (shakes its head). */
+    fun refusePlay(context: Context, now: Long = System.currentTimeMillis()): PetState =
+        update(context, now) { it.refusePlay(now) }
+
     fun rename(context: Context, name: String): PetState =
         update(context, System.currentTimeMillis()) { it.named(name) }
 
@@ -206,6 +210,12 @@ object PetStore {
             farewellGen = p.getInt("farewellGen", 0),
             daycareUntil = p.getLong("daycareUntil", 0L),
             daycareDay = p.getLong("daycareDay", -1L),
+            overfedAt = p.getLong("overfedAt", 0L),
+            extraMess = p.getInt("extraMess", 0),
+            playCount = p.getInt("playCount", 0),
+            playBurstStart = p.getLong("playBurstStart", 0L),
+            playedOutUntil = p.getLong("playedOutUntil", 0L),
+            refusedAt = p.getLong("refusedAt", 0L),
         )
     }
 
@@ -244,6 +254,12 @@ object PetStore {
             .putInt("farewellGen", s.farewellGen)
             .putLong("daycareUntil", s.daycareUntil)
             .putLong("daycareDay", s.daycareDay)
+            .putLong("overfedAt", s.overfedAt)
+            .putInt("extraMess", s.extraMess)
+            .putInt("playCount", s.playCount)
+            .putLong("playBurstStart", s.playBurstStart)
+            .putLong("playedOutUntil", s.playedOutUntil)
+            .putLong("refusedAt", s.refusedAt)
             .apply()
     }
 }
