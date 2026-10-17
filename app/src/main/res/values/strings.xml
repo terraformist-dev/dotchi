@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Glyph Pet</string>
+    <string name="toy_summary">A tiny pet that lives on your Glyph Matrix. Long-press to pick Feed, Play or Clean, then wait.</string>
+    <string name="widget_description">Your Glyph Pet on the home screen</string>
+    <string name="reset_label">START OVER WITH A NEW EGG</string>
+    <string name="reset_title">Start over?</string>
+    <string name="reset_message">Your current pet will be replaced by a new egg.</string>
+    <string name="reset_confirm">New egg</string>
+    <string name="help">HOME SCREEN WIDGET\nLong-press an empty spot on your home screen, tap Widgets, find Glyph Pet and drag it out.\n\nGLYPH MATRIX\nOpen your Glyph settings, go to Glyph Toys and add Glyph Pet. Tap the button on the back of the phone until the pet appears.\nLong-press the back button to pick Feed, Play or Clean. Wait two seconds and it happens. Long-press again to change your mind.\n\nLOOKING AFTER IT\nIt gets hungry and bored over time, and makes a mess every few hours. It sleeps from 11pm to 7am. A red icon means it needs something.</string>
+</resources>
