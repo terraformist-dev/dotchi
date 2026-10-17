@@ -10,6 +10,9 @@ enum class Action { FEED, PLAY, CLEAN, MEDICINE }
 
 enum class Mood { EGG, SICK, SLEEPING, HAPPY, OK, SAD, EATING, PLAYING, CLEANING, MEDICATED }
 
+/** Why the pet is napping outside its normal 11pm-7am sleep. */
+enum class Nap { DARK, CHARGING }
+
 /**
  * What the pet grows into. Which one depends on how well it was looked after
  * in the stage before ("neglect" = awake time spent with a need left unmet).
@@ -43,6 +46,8 @@ data class PetState(
     val neglectMs: Long = 0L,    // awake time with an unmet need, during the current stage
     val childForm: Form? = null,
     val adultForm: Form? = null,
+    val nap: Nap? = null,        // napping right now, and why (set from the phone's sensors)
+    val napSince: Long = 0L,
 ) {
 
     fun stage(now: Long): Stage {
@@ -81,11 +86,19 @@ data class PetState(
             }
         }
         if (sick) return Mood.SICK
-        if (isNight(now) && now - lastActionAt > AWAKE_AFTER_ACTION_MS) return Mood.SLEEPING
+        if (isAsleep(now)) return Mood.SLEEPING
         if (food < LOW || joy < LOW || poops >= 2) return Mood.SAD
         if (food >= HIGH && joy >= HIGH && poops == 0) return Mood.HAPPY
         return Mood.OK
     }
+
+    /** Asleep for the night or napping, and not just woken up by being looked after. */
+    fun isAsleep(now: Long): Boolean =
+        (isNight(now) || nap != null) && now - lastActionAt > AWAKE_AFTER_ACTION_MS
+
+    /** Start or stop a nap. Call [advanceTo] first so the time before now is counted correctly. */
+    fun withNap(reason: Nap?, now: Long): PetState =
+        if (reason == nap) this else copy(nap = reason, napSince = now)
 
     /** The action the pet most needs right now, or null if it's fine. */
     fun mostNeeded(): Action? = when {
@@ -139,8 +152,13 @@ data class PetState(
             val hours = step / HOUR_MS.toFloat()
 
             if (stage(mid) != Stage.EGG) {
-                val asleep = isNight(mid, zone)
-                val pace = if (asleep) SLEEP_PACE else 1f
+                // [nap] can only have changed at [napSince], which is never later than [lastTick].
+                val napping = nap != null && mid >= napSince
+                val night = isNight(mid, zone)
+                val asleep = night || napping
+                val pace = if (night) SLEEP_PACE else if (napping) NAP_PACE else 1f
+                // Napping on the charger slowly cheers it up.
+                if (napping && nap == Nap.CHARGING) joy += CHARGING_JOY_PER_HOUR * hours
                 food -= FOOD_PER_HOUR * hours * pace
                 val gloom = POOP_GLOOM_PER_HOUR * poops + if (sick) SICK_GLOOM_PER_HOUR else 0f
                 joy -= (JOY_PER_HOUR + gloom) * hours * pace
@@ -263,6 +281,8 @@ data class PetState(
         const val POOP_GLOOM_PER_HOUR = 2f
         const val SICK_GLOOM_PER_HOUR = 4f
         const val SLEEP_PACE = 0.3f
+        const val NAP_PACE = 0.5f
+        const val CHARGING_JOY_PER_HOUR = 6f
         const val POOP_EVERY_MS = 4 * HOUR_MS
         const val MAX_POOPS = 3
 

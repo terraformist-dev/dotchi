@@ -17,12 +17,32 @@ object PetStore {
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** The pet as it is right now. */
+    private const val NAP_CHECK_EVERY_MS = 5_000L
+    private var lastNapCheck = 0L
+
+    /** The pet as it is right now. Also starts or ends naps based on what the phone senses. */
     fun get(context: Context, now: Long = System.currentTimeMillis()): PetState = synchronized(lock) {
         val saved = load(context, now)
-        val current = saved.advanceTo(now)
-        if (now - saved.lastTick > SAVE_EVERY_MS) save(context, current)
+        var current = saved.advanceTo(now)
+        var dirty = now - saved.lastTick > SAVE_EVERY_MS
+        if (now - lastNapCheck > NAP_CHECK_EVERY_MS) {
+            lastNapCheck = now
+            val wanted = Senses.napReason(context, current.nap, now)
+            if (wanted != current.nap) {
+                current = current.withNap(wanted, now)
+                dirty = true
+            }
+        }
+        if (dirty) save(context, current)
         current
+    }
+
+    /** End a nap caused by darkness (e.g. the phone was flipped over to say hello). */
+    fun wakeFromDarkNap(context: Context, now: Long = System.currentTimeMillis()) {
+        synchronized(lock) {
+            val current = load(context, now).advanceTo(now)
+            if (current.nap == Nap.DARK) save(context, current.withNap(null, now))
+        }
     }
 
     /** Feed / play / clean, save, and refresh every place the pet is shown. */
@@ -78,6 +98,8 @@ object PetStore {
             neglectMs = p.getLong("neglectMs", 0L),
             childForm = formNamed(p.getString("childForm", null)),
             adultForm = formNamed(p.getString("adultForm", null)),
+            nap = p.getString("nap", null)?.let { name -> Nap.entries.firstOrNull { it.name == name } },
+            napSince = p.getLong("napSince", 0L),
         )
     }
 
@@ -98,6 +120,8 @@ object PetStore {
             .putLong("neglectMs", s.neglectMs)
             .putString("childForm", s.childForm?.name)
             .putString("adultForm", s.adultForm?.name)
+            .putString("nap", s.nap?.name)
+            .putLong("napSince", s.napSince)
             .apply()
     }
 }

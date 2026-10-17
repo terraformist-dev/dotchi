@@ -179,6 +179,17 @@ private object Art {
         ".##",
         "###",
     )
+    val BOLT = Sprite(
+        "..#",
+        ".#.",
+        "###",
+        ".#.",
+        "#..",
+    )
+    val HAND = Sprite(
+        "##",
+        "##",
+    )
     val SPARK = Sprite(
         ".#.",
         "###",
@@ -213,6 +224,9 @@ object PetScene {
     private const val FEET_Y = 19
     private const val CENTER_X = 12
 
+    /** The first part of the greeting is rising up; the rest is waving. */
+    private const val PEEK_PART = 0.35f
+
     /**
      * @param animate false for a still picture.
      * @param selected the action picked with the Glyph Button but not done yet.
@@ -223,6 +237,7 @@ object PetScene {
      * @param moodOverride show this mood instead of the real one (mini-game reactions).
      * @param topText text shown above the pet instead of the usual icons (mini-games).
      * @param hud false hides the icons above the pet.
+     * @param hello 0..1 progress of the "peek up and wave" greeting, or negative for none.
      */
     fun render(
         state: PetState,
@@ -235,21 +250,30 @@ object PetScene {
         moodOverride: Mood? = null,
         topText: String? = null,
         hud: Boolean = true,
+        hello: Float = -1f,
     ): DotGrid {
         val g = DotGrid(SIZE, SIZE)
-        val mood = moodOverride ?: state.mood(now)
+        val greeting = hello >= 0f && hello <= 1f
+        val mood = when {
+            moodOverride != null -> moodOverride
+            greeting -> Mood.HAPPY
+            else -> state.mood(now)
+        }
         val stage = state.stage(now)
-
-        drawGround(g)
 
         if (stage == Stage.EGG) {
             drawEgg(g, state, now, anim, animate)
         } else {
             drawPoops(g, state.poops, anim, animate)
-            drawPet(g, Art.body(stage, state.form(now)), mood, anim, animate, look)
+            drawPet(g, Art.body(stage, state.form(now)), mood, anim, animate, look, if (greeting) hello else -1f)
         }
 
+        // The ground goes on last so a pet peeking up from below it is hidden underneath.
+        for (y in GROUND_Y until SIZE) for (x in 0 until SIZE) g.set(x, y, 0)
+        drawGround(g)
+
         when {
+            greeting && hello > PEEK_PART -> g.text("HI", (SIZE - DotFont.width("HI")) / 2, 1)
             topText != null -> {
                 val x = (SIZE - DotFont.width(topText)) / 2
                 g.text(topText, x, 1)
@@ -297,7 +321,15 @@ object PetScene {
         }
     }
 
-    private fun drawPet(g: DotGrid, body: Body, mood: Mood, anim: Long, animate: Boolean, look: Int) {
+    private fun drawPet(
+        g: DotGrid,
+        body: Body,
+        mood: Mood,
+        anim: Long,
+        animate: Boolean,
+        look: Int,
+        hello: Float,
+    ) {
         val sprite = body.sprite
 
         val lift = if (!animate) 0 else when (mood) {
@@ -309,8 +341,12 @@ object PetScene {
         }
         // An ill pet shivers from side to side instead of bouncing.
         val shiver = if (animate && mood == Mood.SICK) (if ((anim / 300) % 2 == 0L) 0 else 1) else 0
-        val left = CENTER_X - sprite.width / 2 + shiver
-        val top = FEET_Y - sprite.height + 1 - lift
+        // Playing: dash from side to side as well as hopping.
+        val dash = if (animate && mood == Mood.PLAYING) intArrayOf(0, 2, 3, 2, 0, -2, -3, -2)[((anim / 150) % 8).toInt()] else 0
+        // Greeting: start hidden below the ground and rise up.
+        val sink = if (hello in 0f..PEEK_PART) ((1f - hello / PEEK_PART) * (sprite.height + 1)).toInt() else 0
+        val left = CENTER_X - sprite.width / 2 + shiver + dash
+        val top = FEET_Y - sprite.height + 1 - lift + sink
         val level = when (mood) {
             Mood.SLEEPING -> 150
             Mood.SICK -> 120
@@ -332,6 +368,12 @@ object PetScene {
                     g.carve(ex + dx, ey + 1)
                 }
             }
+        }
+
+        // Greeting: a little hand waving beside it.
+        if (hello > PEEK_PART) {
+            val up = (anim / 220) % 2 == 0L
+            g.stamp(Art.HAND, left + sprite.width + 1, top + if (up) 1 else 3)
         }
 
         // Mouth
@@ -396,7 +438,12 @@ object PetScene {
             }
             Mood.SLEEPING -> {
                 val rise = if (animate && (anim / 900) % 2 == 0L) 1 else 0
-                g.stamp(Art.ZED, 16, 3 - rise, level = 170)
+                if (state.nap == Nap.CHARGING) {
+                    // Napping on the charger: a little lightning bolt instead of Zs.
+                    g.stamp(Art.BOLT, 17, 3 - rise, level = 200)
+                } else {
+                    g.stamp(Art.ZED, 16, 3 - rise, level = 170)
+                }
             }
             Mood.SAD, Mood.SICK -> {
                 val need = state.mostNeeded()

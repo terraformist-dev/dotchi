@@ -15,7 +15,12 @@ import android.widget.RemoteViews
 class PetWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        draw(context, manager, ids)
+        // Every half hour: take a quick look at the light and charger first, so naps start and end.
+        val pending = goAsync()
+        Senses.sample(context) {
+            draw(context, manager, ids)
+            pending.finish()
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -27,8 +32,10 @@ class PetWidgetProvider : AppWidgetProvider() {
                 // The pet reacts for a few seconds, then goes back to normal.
                 val pending = goAsync()
                 Handler(Looper.getMainLooper()).postDelayed({
-                    refreshAll(context)
-                    pending.finish()
+                    Senses.sample(context) {
+                        refreshAll(context)
+                        pending.finish()
+                    }
                 }, PetState.REACT_MS + 300)
             }
             return

@@ -18,6 +18,14 @@ class MainActivity : Activity() {
     private lateinit var statusView: TextView
     private lateinit var buttons: List<ImageView>
 
+    // Shake the phone for a quick play; the light sensor also lets it nap in the dark.
+    private val sensors by lazy {
+        PetSensors(this, onShake = {
+            PetStore.act(this, Action.PLAY)
+            render()
+        })
+    }
+
     private val loop = object : Runnable {
         override fun run() {
             render()
@@ -68,11 +76,13 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         handler.post(loop)
+        sensors.start()
         PetWidgetProvider.refreshAll(this)
     }
 
     override fun onPause() {
         handler.removeCallbacks(loop)
+        sensors.stop()
         super.onPause()
     }
 
@@ -98,7 +108,11 @@ class MainActivity : Activity() {
         }
         val mood = when (state.mood(now)) {
             Mood.SICK -> "ILL"
-            Mood.SLEEPING -> "ASLEEP"
+            Mood.SLEEPING -> when (state.nap) {
+                Nap.CHARGING -> "RECHARGING"
+                Nap.DARK -> if (PetState.isNight(now)) "ASLEEP" else "NAPPING"
+                null -> "ASLEEP"
+            }
             Mood.HAPPY -> "HAPPY"
             Mood.SAD -> "UNHAPPY"
             Mood.EATING -> "EATING"

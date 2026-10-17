@@ -26,6 +26,10 @@ import com.nothing.ketchum.GlyphToy
  *    not a mini-game (those are in the app for now).
  *  - Then just wait: after a moment the picked action happens.
  *
+ * Motion (while the pet is awake on the matrix):
+ *  - Shake the phone: a quick play, and the pet dashes about.
+ *  - Turn the phone face-down: the pet peeks up from below and waves (also when the toy is picked).
+ *
  * Animation:
  *  - Screen on, or within a minute of touching the Glyph Button: animates continuously.
  *    (The phone is usually face-down with the screen off when you use a Glyph Toy, so we
@@ -51,6 +55,13 @@ class GlyphPetToyService : Service() {
     /** True when the last thing that woke us was the once-a-minute always-on tick. */
     private var alwaysOn = false
 
+    /** When the current "peek up and wave" greeting started (0 = none). */
+    private var helloAt = 0L
+
+    private val sensors by lazy {
+        PetSensors(applicationContext, onShake = { onShake() }, onFlippedFaceDown = { sayHello() })
+    }
+
     private val main = Handler(Looper.getMainLooper())
 
     private val power by lazy { getSystemService(Context.POWER_SERVICE) as PowerManager }
@@ -72,6 +83,7 @@ class GlyphPetToyService : Service() {
             } else {
                 // Rest: one still frame, then let the phone sleep until something wakes us.
                 draw(now, animate = false, dim = alwaysOn)
+                sensors.stop()
                 releaseWakeLock()
             }
         }
@@ -110,7 +122,7 @@ class GlyphPetToyService : Service() {
             override fun onServiceConnected(name: ComponentName?) {
                 manager.register(Glyph.DEVICE_23112)
                 connected = true
-                animateFor(ACTIVE_MS, alwaysOnTick = false)
+                sayHello()
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
@@ -128,6 +140,7 @@ class GlyphPetToyService : Service() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         main.removeCallbacks(tick)
+        sensors.stop()
         releaseWakeLock()
         if (receiverRegistered) {
             unregisterReceiver(screenOnReceiver)
@@ -152,6 +165,18 @@ class GlyphPetToyService : Service() {
         val order: List<Action?> = PetStore.get(applicationContext).actions() + listOf(null)
         selected = order[(order.indexOf(selected) + 1) % order.size]
         selectedAt = System.currentTimeMillis()
+        animateFor(ACTIVE_MS, alwaysOnTick = false)
+    }
+
+    private fun onShake() {
+        PetStore.act(applicationContext, Action.PLAY)
+        animateFor(ACTIVE_MS, alwaysOnTick = false)
+    }
+
+    /** The pet peeks up from below the ground and waves. Also wakes it from a dark-room nap. */
+    private fun sayHello() {
+        helloAt = System.currentTimeMillis()
+        PetStore.wakeFromDarkNap(applicationContext)
         animateFor(ACTIVE_MS, alwaysOnTick = false)
     }
 
@@ -180,6 +205,7 @@ class GlyphPetToyService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "wake lock failed", e)
         }
+        sensors.start()
         restartLoop()
     }
 
@@ -201,7 +227,9 @@ class GlyphPetToyService : Service() {
         if (!connected) return
         val state = PetStore.get(applicationContext, now)
         val progress = if (selected != null) (now - selectedAt).toFloat() / CONFIRM_AFTER_MS else 0f
-        val grid = PetScene.render(state, now, animate, selected, progress)
+        val sinceHello = now - helloAt
+        val hello = if (helloAt > 0L && sinceHello < HELLO_MS) sinceHello.toFloat() / HELLO_MS else -1f
+        val grid = PetScene.render(state, now, animate, selected, progress, hello = hello)
         val frame = IntArray(grid.levels.size) { i ->
             val level = if (dim) grid.levels[i] * 6 / 10 else grid.levels[i]
             // The matrix takes 0..4095 per LED; our grid is 0..255.
@@ -220,5 +248,6 @@ class GlyphPetToyService : Service() {
         const val CONFIRM_AFTER_MS = 2_400L
         const val ACTIVE_MS = 60_000L
         const val AOD_BURST_MS = 4_000L
+        const val HELLO_MS = 3_000L
     }
 }

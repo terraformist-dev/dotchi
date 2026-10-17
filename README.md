@@ -29,6 +29,7 @@ Everything is explained in the app: tap **GUIDE** on the pet screen.
 | `PetStore.kt` | Saves the pet; the one place the widget, toy and app all go through. |
 | `PetScene.kt` | Draws the 25×25 scene (pet, mess, icons). Shared by the widget and the Glyph Matrix. |
 | `DotGrid.kt` | The dot grid, the exact Glyph Matrix shape, and a 3×5 dot font. |
+| `Senses.kt` | Shake, face-down, light and charging detection (for play, hello and naps). |
 | `DotPainter.kt` | Paints a dot grid as round dots for the widget and app (white, black, Nothing red). |
 | `PetWidgetProvider.kt` | The home-screen widget. |
 | `GlyphPetToyService.kt` | The Glyph Toy. |

@@ -45,9 +45,25 @@ object Guide {
                 "Tap MEDS to make it better. It won't enjoy the taste, but it'll be fine.",
         ),
         Section(
-            "SLEEP",
+            "SHAKE TO PLAY",
+            "Give your phone a good shake for a quick game of chase: your pet dashes about and " +
+                "gets a bit happier. This works with the app open, and on the Glyph Matrix while your " +
+                "pet is awake there (for a minute after you touch the back button).\n\n" +
+                "An ill pet or an egg won't play.",
+        ),
+        Section(
+            "SLEEP AND NAPS",
             "It sleeps from 11pm to 7am and needs much less looking after overnight. " +
-                "You'll see little Zs above it.",
+                "You'll see little Zs above it.\n\n" +
+                "It also naps during the day:\n\n" +
+                "When it's dark, like a dark room or your pocket, it dozes off. When the lights come " +
+                "back on, it wakes up. While napping its needs build up more slowly.\n\n" +
+                "When your phone is charging, it naps on the charger, shown by a little lightning bolt. " +
+                "Charging naps slowly cheer it up. It wakes when you unplug.\n\n" +
+                "Feeding, cleaning or playing with it wakes it for a minute.\n\n" +
+                "Your phone notices the light and the charger whenever the app is open, the Glyph " +
+                "Matrix pet is awake, or the widget refreshes (about every half hour). So a nap can " +
+                "take a little while to show on the widget.",
         ),
         Section(
             "GROWING UP",
@@ -78,7 +94,12 @@ object Guide {
                 "Long-press the back button to choose an action. Each long-press moves to the next one: " +
                 "Feed, Play (or Meds if it's ill), Clean, then nothing. The chosen action shows as a red " +
                 "icon. Wait 2 seconds and it happens. Long-press until nothing is shown to cancel.\n\n" +
-                "Play on the Glyph Matrix is a quick play, not a game.\n\n" +
+                "Play on the Glyph Matrix is a quick play, not a game. You can also shake the phone " +
+                "to play.\n\n" +
+                "Each time you pick Glyph Pet, or turn the phone face-down while it's awake, it peeks " +
+                "up from below and waves hello. Saying hello wakes it from a dark-room nap, because " +
+                "the light sensor is on the screen side and can't see the light when the phone is " +
+                "face-down.\n\n" +
                 "Your pet animates for a minute after you touch the back button. If you leave it on the " +
                 "always-on Glyph, it wakes for a little bounce once a minute.",
         ),
