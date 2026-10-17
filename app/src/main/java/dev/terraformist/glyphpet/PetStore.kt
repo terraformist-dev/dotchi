@@ -11,107 +11,146 @@ object PetStore {
 
     private const val PREFS = "pet"
     private const val SAVE_EVERY_MS = 5 * PetState.MINUTE_MS
+    private const val NAP_CHECK_EVERY_MS = 5_000L
 
     private val lock = Any()
+    private var lastNapCheck = 0L
 
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    private const val NAP_CHECK_EVERY_MS = 5_000L
-    private var lastNapCheck = 0L
+    /** The weather, in the terms the pet cares about. */
+    private fun climate(context: Context, now: Long): Climate? = Weather.current(context, now)?.let {
+        Climate(
+            rainy = it.sky == Sky.RAIN || it.sky == Sky.STORM,
+            snowy = it.sky == Sky.SNOW,
+            hot = it.tempC >= PetState.HOT_C,
+        )
+    }
 
-    /** The pet as it is right now. Also starts or ends naps based on what the phone senses. */
+    /**
+     * Load and bring up to date. Also records things for the Album: forms seen, and a pet
+     * that has set off on its adventure.
+     */
+    private fun current(context: Context, now: Long): Pair<PetState, Boolean> {
+        val saved = load(context, now)
+        var s = saved.advanceTo(now, climate = climate(context, now))
+        var changed = s.lastTick != saved.lastTick && now - saved.lastTick > SAVE_EVERY_MS
+        if (s.albumPending) {
+            Album.addGeneration(context, s.farewellGen, s.farewellName, s.farewellForm, s.bornAt)
+            s = s.copy(albumPending = false)
+            changed = true
+        }
+        if (s.generation != saved.generation) changed = true
+        s.form(now)?.let { Album.noteForm(context, PetState.codeOf(it)) }
+        if (s.stage(now) == Stage.BABY) Album.noteForm(context, 1)
+        return s to changed
+    }
+
+    /**
+     * The pet as it is right now. Also starts or ends naps based on what the phone senses.
+     * [lookingNow] is true for the app and the Glyph Matrix: they play one-off animations
+     * (growing up, goodbyes), so those start only when someone can actually see them.
+     */
     fun get(
         context: Context,
         now: Long = System.currentTimeMillis(),
         checkNapNow: Boolean = false,
+        lookingNow: Boolean = false,
     ): PetState = synchronized(lock) {
-        val saved = load(context, now)
-        var current = saved.advanceTo(now)
-        var dirty = now - saved.lastTick > SAVE_EVERY_MS
+        var (s, dirty) = current(context, now)
         if (checkNapNow || now - lastNapCheck > NAP_CHECK_EVERY_MS) {
             lastNapCheck = now
             // Just woken up: no new nap for a while, even if it's still dark or charging.
-            val wanted = if (current.recentlyWoken(now)) null else Senses.napReason(context, current.nap, now)
-            if (wanted != current.nap) {
+            val wanted = if (s.recentlyWoken(now)) null else Senses.napReason(context, s.nap, now)
+            if (wanted != s.nap) {
                 // Lights on or unplugged: wake up properly (with the stretch), not just stop napping.
-                current = if (wanted == null) current.wake(now) else current.withNap(wanted, now)
+                s = if (wanted == null) s.wake(now) else s.withNap(wanted, now)
                 dirty = true
             }
         }
-        if (dirty) save(context, current)
-        current
+        if (lookingNow) {
+            val next = s.nextCutscene(now)
+            if (next != s) {
+                s = next
+                dirty = true
+            }
+        }
+        if (dirty) save(context, s)
+        s
     }
 
-    /** Wake it up (shaking a sleeping pet). Doesn't count as playing. */
-    fun wake(context: Context, now: Long = System.currentTimeMillis()): PetState {
+    /** Change the pet under the lock, save it, and refresh the widget. */
+    private fun update(context: Context, now: Long, refresh: Boolean = true, change: (PetState) -> PetState): PetState {
         val updated = synchronized(lock) {
-            val next = load(context, now).advanceTo(now).wake(now)
+            val next = change(current(context, now).first)
             save(context, next)
             next
         }
-        PetWidgetProvider.refreshAll(context)
+        if (refresh) PetWidgetProvider.refreshAll(context)
         return updated
     }
 
+    /** Wake it up (shaking a sleeping pet). Doesn't count as playing. */
+    fun wake(context: Context, now: Long = System.currentTimeMillis()): PetState =
+        update(context, now) { it.wake(now) }
+
     /** A shake: wakes it if it's asleep, otherwise a quick play. */
     fun shake(context: Context, now: Long = System.currentTimeMillis()): PetState {
-        val current = get(context, now)
-        return if (current.isAsleep(now)) wake(context, now) else act(context, Action.PLAY, now)
+        val s = get(context, now)
+        return if (s.isAsleep(now)) wake(context, now) else act(context, Action.PLAY, now)
     }
 
     /** Steps counted by the phone. Doesn't refresh the widget (steps can arrive every second). */
     fun walked(context: Context, steps: Int, live: Boolean, now: Long = System.currentTimeMillis()) {
-        synchronized(lock) {
-            save(context, load(context, now).advanceTo(now).walked(steps, now, live))
-        }
+        val s = update(context, now, refresh = false) { it.walked(steps, now, live) }
+        Album.noteSteps(context, steps, s.stepsOn(now))
     }
 
     /** Met a friend's pet for the first time today. */
-    fun metFriend(context: Context, now: Long = System.currentTimeMillis()): PetState {
-        val updated = synchronized(lock) {
-            val next = load(context, now).advanceTo(now).metFriend(now)
-            save(context, next)
-            next
-        }
-        PetWidgetProvider.refreshAll(context)
-        return updated
-    }
+    fun metFriend(context: Context, now: Long = System.currentTimeMillis()): PetState =
+        update(context, now) { it.metFriend(now) }
 
     /** End a nap caused by darkness (e.g. the phone was flipped over to say hello). */
     fun wakeFromDarkNap(context: Context, now: Long = System.currentTimeMillis()) {
         synchronized(lock) {
-            val current = load(context, now).advanceTo(now)
-            if (current.nap == Nap.DARK) save(context, current.wake(now))
+            val s = current(context, now).first
+            if (s.nap == Nap.DARK) save(context, s.wake(now))
         }
     }
 
-    /** Feed / play / clean, save, and refresh every place the pet is shown. */
+    /** Feed / play / clean / medicine, save, and refresh every place the pet is shown. */
     fun act(context: Context, action: Action, now: Long = System.currentTimeMillis()): PetState {
-        val updated = synchronized(lock) {
-            val next = load(context, now).advanceTo(now).apply(action, now)
-            save(context, next)
-            next
+        val rainy = climate(context, now)?.rainy == true
+        return update(context, now) { s ->
+            if (action == Action.PLAY && rainy) s.played(true, now, boost = 30f * PetState.RAINY_PLAY_FACTOR)
+            else s.apply(action, now)
         }
-        PetWidgetProvider.refreshAll(context)
-        return updated
     }
 
-    /** Record the result of a mini-game. */
+    /** Record the result of a mini-game (app or Glyph Matrix). */
     fun played(context: Context, won: Boolean, now: Long = System.currentTimeMillis()): PetState {
-        val updated = synchronized(lock) {
-            val next = load(context, now).advanceTo(now).played(won, now)
+        val factor = if (climate(context, now)?.rainy == true) PetState.RAINY_PLAY_FACTOR else 1f
+        return update(context, now) { it.played(won, now, boost = (if (won) 40f else 15f) * factor) }
+    }
+
+    fun rename(context: Context, name: String): PetState =
+        update(context, System.currentTimeMillis()) { it.named(name) }
+
+    fun startDaycare(context: Context, now: Long = System.currentTimeMillis()): PetState =
+        update(context, now) { it.startDaycare(now) }
+
+    fun endDaycare(context: Context, now: Long = System.currentTimeMillis()): PetState =
+        update(context, now) { it.endDaycare(now) }
+
+    /** Start over with a fresh egg (the old pet isn't added to the album). */
+    fun reset(context: Context, now: Long = System.currentTimeMillis()): PetState {
+        val egg = synchronized(lock) {
+            val old = current(context, now).first
+            val next = PetState.newEgg(now).copy(generation = old.generation + 1)
             save(context, next)
             next
         }
-        PetWidgetProvider.refreshAll(context)
-        return updated
-    }
-
-    /** Start over with a fresh egg. */
-    fun reset(context: Context, now: Long = System.currentTimeMillis()): PetState {
-        val egg = PetState.newEgg(now)
-        synchronized(lock) { save(context, egg) }
         PetWidgetProvider.refreshAll(context)
         return egg
     }
@@ -145,6 +184,18 @@ object PetStore {
             stepsToday = p.getInt("stepsToday", 0),
             stepsDay = p.getLong("stepsDay", -1L),
             walkingUntil = p.getLong("walkingUntil", 0L),
+            name = p.getString("name", "") ?: "",
+            generation = p.getInt("generation", 1),
+            revealedCode = p.getInt("revealedCode", -1),
+            cutscene = p.getInt("cutscene", Cutscene.NONE),
+            cutsceneAt = p.getLong("cutsceneAt", 0L),
+            farewellPending = p.getBoolean("farewellPending", false),
+            albumPending = p.getBoolean("albumPending", false),
+            farewellForm = formNamed(p.getString("farewellForm", null)),
+            farewellName = p.getString("farewellName", "") ?: "",
+            farewellGen = p.getInt("farewellGen", 0),
+            daycareUntil = p.getLong("daycareUntil", 0L),
+            daycareDay = p.getLong("daycareDay", -1L),
         )
     }
 
@@ -171,6 +222,18 @@ object PetStore {
             .putInt("stepsToday", s.stepsToday)
             .putLong("stepsDay", s.stepsDay)
             .putLong("walkingUntil", s.walkingUntil)
+            .putString("name", s.name)
+            .putInt("generation", s.generation)
+            .putInt("revealedCode", s.revealedCode)
+            .putInt("cutscene", s.cutscene)
+            .putLong("cutsceneAt", s.cutsceneAt)
+            .putBoolean("farewellPending", s.farewellPending)
+            .putBoolean("albumPending", s.albumPending)
+            .putString("farewellForm", s.farewellForm?.name)
+            .putString("farewellName", s.farewellName)
+            .putInt("farewellGen", s.farewellGen)
+            .putLong("daycareUntil", s.daycareUntil)
+            .putLong("daycareDay", s.daycareDay)
             .apply()
     }
 }

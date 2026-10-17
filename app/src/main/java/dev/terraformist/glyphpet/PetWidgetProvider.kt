@@ -26,6 +26,13 @@ class PetWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Nudges.ACTION) {
+            // Half-hourly: refresh the widget, and maybe blink a nudge on the Glyph Matrix.
+            val pending = goAsync()
+            refreshAll(context)
+            Nudges.check(context) { pending.finish() }
+            return
+        }
         if (intent.action == ACTION_PET) {
             val action = intent.getStringExtra(EXTRA_ACTION)
                 ?.let { name -> Action.entries.firstOrNull { it.name == name } }

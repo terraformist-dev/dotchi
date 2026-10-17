@@ -8,7 +8,17 @@ enum class Stage { EGG, BABY, CHILD, ADULT }
 /** MEDICINE is only offered while the pet is ill (it takes Play's place). */
 enum class Action { FEED, PLAY, CLEAN, MEDICINE }
 
-enum class Mood { EGG, SICK, SLEEPING, WAKING, WALKING, HAPPY, OK, SAD, EATING, PLAYING, CLEANING, MEDICATED }
+enum class Mood { EGG, GROWING, SICK, SLEEPING, WAKING, WALKING, HAPPY, OK, SAD, EATING, PLAYING, CLEANING, MEDICATED }
+
+/** Weather that changes how the pet feels (from [Weather], passed in so this file stays plain Kotlin). */
+data class Climate(val rainy: Boolean, val snowy: Boolean, val hot: Boolean)
+
+/** One-off animations that play the next time someone is looking (app or Glyph Matrix). */
+object Cutscene {
+    const val NONE = 0
+    const val GROW = 1      // hatched or grew into a new form
+    const val FAREWELL = 2  // the old adult sets off on its adventure
+}
 
 /** Why the pet is napping outside its normal 11pm-7am sleep. */
 enum class Nap { DARK, CHARGING }
@@ -52,6 +62,18 @@ data class PetState(
     val stepsToday: Int = 0,     // steps walked with the phone today
     val stepsDay: Long = -1L,    // which day [stepsToday] belongs to (days since 1970, local time)
     val walkingUntil: Long = 0L, // shows the walking animation until then
+    val name: String = "",       // given by the owner; shown in the app only
+    val generation: Int = 1,
+    val revealedCode: Int = -1,  // the form last shown with a reveal (-1 = not tracked yet)
+    val cutscene: Int = Cutscene.NONE,
+    val cutsceneAt: Long = 0L,
+    val farewellPending: Boolean = false, // the previous pet left; show the goodbye
+    val albumPending: Boolean = false,    // the previous pet left; add it to the album
+    val farewellForm: Form? = null,
+    val farewellName: String = "",
+    val farewellGen: Int = 0,
+    val daycareUntil: Long = 0L,
+    val daycareDay: Long = -1L,  // the day daycare was last used (once a day)
 ) {
 
     fun stage(now: Long): Stage {
@@ -80,6 +102,7 @@ data class PetState(
     fun isReacting(now: Long): Boolean = lastAction != null && now - lastActionAt in 0L until REACT_MS
 
     fun mood(now: Long): Mood {
+        if (isGrowing(now)) return Mood.GROWING
         if (stage(now) == Stage.EGG) return Mood.EGG
         if (isReacting(now)) {
             return when (lastAction) {
@@ -110,6 +133,52 @@ data class PetState(
     fun isWaking(now: Long): Boolean = wokenAt > 0L && now - wokenAt in 0L until WAKING_ANIM_MS
 
     fun isWalking(now: Long): Boolean = now < walkingUntil
+
+    // ---- Growing up, saying goodbye ----------------------------------------------------
+
+    /** Which pet this is, as one number: 0 egg, 1 baby, 2 PIP, 3 GRUB, 4 NOVA, 5 BUD, 6 GLOOP. */
+    fun formCode(now: Long): Int = when (stage(now)) {
+        Stage.EGG -> 0
+        Stage.BABY -> 1
+        else -> codeOf(form(now))
+    }
+
+    fun isGrowing(now: Long): Boolean = cutscene == Cutscene.GROW && now - cutsceneAt in 0L until GROW_MS
+    fun isFarewell(now: Long): Boolean = cutscene == Cutscene.FAREWELL && now - cutsceneAt in 0L until FAREWELL_MS
+
+    /** When this pet will set off on its adventure. */
+    fun departsAt(): Long = bornAt + LIFESPAN_MS
+
+    /**
+     * Someone is looking: start the next one-off animation if one is due (a goodbye for a pet
+     * that has left, or a reveal for a new form), and tidy up ones that have finished.
+     */
+    fun nextCutscene(now: Long): PetState {
+        if (isGrowing(now) || isFarewell(now)) return this
+        var s = this
+        if (s.cutscene == Cutscene.FAREWELL) s = s.copy(cutscene = Cutscene.NONE, farewellPending = false)
+        if (s.cutscene == Cutscene.GROW) s = s.copy(cutscene = Cutscene.NONE)
+        if (s.farewellPending) return s.copy(cutscene = Cutscene.FAREWELL, cutsceneAt = now)
+        val code = s.formCode(now)
+        if (s.revealedCode == -1) return s.copy(revealedCode = code)
+        if (code != s.revealedCode && code != 0) {
+            return s.copy(cutscene = Cutscene.GROW, cutsceneAt = now, revealedCode = code)
+        }
+        return s
+    }
+
+    // ---- Daycare --------------------------------------------------------------------------
+
+    fun isAtDaycare(now: Long): Boolean = now < daycareUntil
+
+    fun canUseDaycare(now: Long, zone: ZoneId = ZoneId.systemDefault()): Boolean =
+        !isAtDaycare(now) && daycareDay != epochDay(now, zone) && stage(now) != Stage.EGG
+
+    fun startDaycare(now: Long, zone: ZoneId = ZoneId.systemDefault()): PetState =
+        if (!canUseDaycare(now, zone)) this
+        else copy(daycareUntil = now + DAYCARE_MS, daycareDay = epochDay(now, zone))
+
+    fun endDaycare(now: Long): PetState = if (isAtDaycare(now)) copy(daycareUntil = now) else this
 
     /** Wake it up (shake, or lights on). Doesn't count as playing. Call [advanceTo] first. */
     fun wake(now: Long): PetState = copy(nap = null, napSince = now, wokenAt = now)
@@ -178,8 +247,35 @@ data class PetState(
         Action.MEDICINE -> 0
     }
 
+    /**
+     * Replay the time between [lastTick] and [now]. If the pet's time is up on the way, it sets
+     * off on its adventure, a new egg (the next generation) takes its place, and the replay
+     * carries on with the egg.
+     */
+    fun advanceTo(now: Long, zone: ZoneId = ZoneId.systemDefault(), climate: Climate? = null): PetState {
+        if (now <= lastTick) return this
+        val departAt = departsAt()
+        if (now < departAt) return replay(now, zone, climate)
+        val old = if (lastTick < departAt) replay(departAt, zone, climate) else this
+        val egg = newEgg(departAt).copy(
+            generation = old.generation + 1,
+            stepsToday = old.stepsToday,
+            stepsDay = old.stepsDay,
+            nap = old.nap,
+            napSince = departAt,
+            daycareUntil = old.daycareUntil,
+            daycareDay = old.daycareDay,
+            farewellPending = true,
+            albumPending = true,
+            farewellForm = old.adultForm ?: Form.GLOOP,
+            farewellName = old.name,
+            farewellGen = old.generation,
+        )
+        return egg.advanceTo(now, zone, climate)
+    }
+
     /** Replay the time between [lastTick] and [now] in small steps. */
-    fun advanceTo(now: Long, zone: ZoneId = ZoneId.systemDefault()): PetState {
+    private fun replay(now: Long, zone: ZoneId, climate: Climate?): PetState {
         if (now <= lastTick) return this
         var t = lastTick
         var food = food
@@ -208,15 +304,31 @@ data class PetState(
                 // Shaken awake: stays up for a while, even at night.
                 val woken = wokenAt > 0L && mid >= wokenAt && mid < wokenAt + WOKEN_AWAKE_MS
                 val asleep = (night || napping) && !woken
-                val pace = if (!asleep) 1f else if (night) SLEEP_PACE else NAP_PACE
+                // Daycare: someone else is looking after it, so its needs barely move.
+                val daycare = mid < daycareUntil
+                val pace = when {
+                    daycare -> DAYCARE_PACE
+                    !asleep -> 1f
+                    night -> SLEEP_PACE
+                    else -> NAP_PACE
+                }
                 // Napping on the charger slowly cheers it up.
                 if (asleep && napping && nap == Nap.CHARGING) joy += CHARGING_JOY_PER_HOUR * hours
-                food -= FOOD_PER_HOUR * hours * pace
+                // Hot weather makes it hungrier.
+                val heat = if (climate?.hot == true && !asleep) HOT_FOOD_FACTOR else 1f
+                food -= FOOD_PER_HOUR * hours * pace * heat
                 val gloom = POOP_GLOOM_PER_HOUR * poops + if (sick) SICK_GLOOM_PER_HOUR else 0f
-                joy -= (JOY_PER_HOUR + gloom) * hours * pace
+                // Rain makes it restless indoors; snow delights it.
+                val weatherMood = when {
+                    asleep || daycare || climate == null -> 0f
+                    climate.rainy -> RAIN_GLOOM_PER_HOUR
+                    climate.snowy -> -SNOW_JOY_PER_HOUR
+                    else -> 0f
+                }
+                joy -= (JOY_PER_HOUR + gloom) * hours * pace + weatherMood * hours
 
                 if (end >= nextPoop) {
-                    if (asleep) {
+                    if (asleep || daycare) {
                         // Hold it until morning.
                         nextPoop = end + 30 * MINUTE_MS
                     } else {
@@ -225,7 +337,7 @@ data class PetState(
                     }
                 }
 
-                if (!asleep) {
+                if (!asleep && !daycare) {
                     // Falling ill: mess left lying around, or starving.
                     val risky = poops >= 2 || food < STARVING
                     sickRisk = if (risky) sickRisk + step else maxOf(0L, sickRisk - step)
@@ -315,6 +427,8 @@ data class PetState(
         )
     }
 
+    fun named(newName: String): PetState = copy(name = newName)
+
     /** After a mini-game (or a quick play on the Glyph Matrix). Ill pets can't play. */
     fun played(won: Boolean, now: Long, boost: Float = if (won) 40f else 15f): PetState {
         if (stage(now) == Stage.EGG || sick) return this
@@ -353,6 +467,21 @@ data class PetState(
         const val STEP_GOAL_JOY = 15f
         const val WALKING_SHOW_MS = 15_000L
         const val FRIEND_JOY = 20f
+
+        const val GROW_MS = 3_200L
+        const val FAREWELL_MS = 6_000L
+        /** Adulthood lasts two weeks; then it sets off on an adventure and leaves an egg. */
+        const val ADULT_MS = 14 * DAY_MS
+
+        const val DAYCARE_MS = 8 * HOUR_MS
+        const val DAYCARE_PACE = 0.25f
+
+        const val RAIN_GLOOM_PER_HOUR = 1f
+        const val SNOW_JOY_PER_HOUR = 1f
+        const val HOT_FOOD_FACTOR = 1.3f
+        const val HOT_C = 27
+        /** Play counts for more on rainy days, when it's stuck inside. */
+        const val RAINY_PLAY_FACTOR = 1.5f
         const val CHARGING_JOY_PER_HOUR = 6f
         const val POOP_EVERY_MS = 4 * HOUR_MS
         const val MAX_POOPS = 3
@@ -370,6 +499,8 @@ data class PetState(
         const val NIGHT_START_HOUR = 23
         const val NIGHT_END_HOUR = 7
 
+        const val LIFESPAN_MS = CHILD_MS + ADULT_MS
+
         private const val STEP_MS = 10 * MINUTE_MS
         private const val MAX_REPLAY_MS = 14 * DAY_MS
 
@@ -382,7 +513,26 @@ data class PetState(
             nextPoopAt = now + EGG_MS + POOP_EVERY_MS,
             lastAction = null,
             lastActionAt = 0L,
+            revealedCode = 0, // so hatching gets its reveal
         )
+
+        fun codeOf(form: Form?): Int = when (form) {
+            Form.PIP -> 2
+            Form.GRUB -> 3
+            Form.NOVA -> 4
+            Form.BUD -> 5
+            Form.GLOOP -> 6
+            null -> 1
+        }
+
+        fun formOfCode(code: Int): Form? = when (code) {
+            2 -> Form.PIP
+            3 -> Form.GRUB
+            4 -> Form.NOVA
+            5 -> Form.BUD
+            6 -> Form.GLOOP
+            else -> null
+        }
 
         fun epochDay(time: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
             Instant.ofEpochMilli(time).atZone(zone).toLocalDate().toEpochDay()

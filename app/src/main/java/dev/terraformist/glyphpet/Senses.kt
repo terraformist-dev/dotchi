@@ -132,6 +132,13 @@ class PetSensors(
     private val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private var running = false
     private var knowsOrientation = false
+
+    /** The latest accelerometer reading (m/s²), for the tilt games. */
+    @Volatile var ax = 0f
+        private set
+    @Volatile var ay = 0f
+        private set
+
     private var wasFaceDown = false
 
     // Shake detection: several strong jolts close together.
@@ -170,6 +177,8 @@ class PetSensors(
             Sensor.TYPE_STEP_COUNTER -> Steps.onCounter(context.applicationContext, event.values[0], now)
             Sensor.TYPE_ACCELEROMETER -> {
                 val (x, y, z) = Triple(event.values[0], event.values[1], event.values[2])
+                ax = x
+                ay = y
 
                 val faceDown = z < Senses.FACE_DOWN_Z
                 // Use a looser threshold to count as "face-up again", so wobbles don't re-trigger.

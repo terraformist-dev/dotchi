@@ -45,6 +45,7 @@ class GuideActivity : Activity() {
                 typeface = Typeface.MONOSPACE
                 setLineSpacing(dp(3).toFloat(), 1f)
             })
+            if (section.heading == Guide.NUDGES_HEADING) column.addView(nudgeSwitch())
         }
 
         column.addView(TextView(this).apply {
@@ -61,6 +62,29 @@ class GuideActivity : Activity() {
             fitsSystemWindows = true
             addView(column)
         })
+    }
+
+    /** The on/off switch for Glyph nudges, shown under that section. */
+    private fun nudgeSwitch(): TextView = TextView(this).apply {
+        fun show() {
+            val on = Nudges.isOn(this@GuideActivity)
+            text = if (on) "GLYPH NUDGES: ON  ·  TAP TO TURN OFF" else "GLYPH NUDGES: OFF  ·  TAP TO TURN ON"
+            setTextColor(if (on) 0xFFFFFFFF.toInt() else 0xFFD71921.toInt())
+        }
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        setBackgroundResource(R.drawable.button_bg)
+        val pad = dp(14)
+        setPadding(pad, pad, pad, pad)
+        layoutParams = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(12) }
+        show()
+        setOnClickListener {
+            Nudges.setOn(this@GuideActivity, !Nudges.isOn(this@GuideActivity))
+            show()
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

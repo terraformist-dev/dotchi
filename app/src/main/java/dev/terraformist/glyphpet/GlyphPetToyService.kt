@@ -30,8 +30,8 @@ import com.nothing.ketchum.GlyphToy
  *
  * Controls (Glyph Button on the back):
  *  - Long-press: pick the next action (Feed -> Play -> Clean -> nothing).
- *    While the pet is ill, Medicine takes Play's place. Play here is a quick play,
- *    not a mini-game (those are in the app for now).
+ *    While the pet is ill, Medicine takes Play's place. Play here starts a tilt game
+ *    (Catch or Roll, taking turns); a long-press during a game stops it.
  *  - Then just wait: after a moment the picked action happens.
  *
  * Motion (while the pet is awake on the matrix):
@@ -57,6 +57,13 @@ class GlyphPetToyService : Service() {
 
     private var matrix: GlyphMatrixManager? = null
     private var connected = false
+
+    /** A tilt game in progress (started by picking Play with the back button). */
+    private var game: GlyphGame? = null
+    private var nextGameIsCatch = true
+
+    /** When the egg was last poked (long-press while it's still an egg). */
+    private var pokedAt = 0L
 
     private var selected: Action? = null
     private var selectedAt = 0L
@@ -116,7 +123,11 @@ class GlyphPetToyService : Service() {
             confirmSelectionIfDue(now)
             val screenOn = power.isInteractive
             if (screenOn) alwaysOn = false
-            if (screenOn || now < animateUntil || selected != null) {
+            val g = game
+            if (g != null) {
+                runGame(g, now)
+                main.postDelayed(this, GAME_FRAME_MS)
+            } else if (screenOn || now < animateUntil || selected != null) {
                 draw(now, animate = true, dim = alwaysOn)
                 main.postDelayed(this, FRAME_MS)
             } else {
@@ -169,6 +180,7 @@ class GlyphPetToyService : Service() {
             override fun onServiceConnected(name: ComponentName?) {
                 manager.register(Glyph.DEVICE_23112)
                 connected = true
+                active = true
                 Weather.refreshIfStale(applicationContext)
                 sayHello()
             }
@@ -203,7 +215,9 @@ class GlyphPetToyService : Service() {
             receiverRegistered = false
         }
         connected = false
+        active = false
         selected = null
+        game = null
         matrix?.let {
             try {
                 it.turnOff()
@@ -217,6 +231,19 @@ class GlyphPetToyService : Service() {
     }
 
     private fun onLongPress() {
+        val now = System.currentTimeMillis()
+        // A long-press during a game stops it.
+        if (game != null) {
+            game = null
+            animateFor(ACTIVE_MS, alwaysOnTick = false)
+            return
+        }
+        // Still an egg: nothing to choose yet, so it just wobbles.
+        if (PetStore.get(applicationContext, now).stage(now) == Stage.EGG) {
+            pokedAt = now
+            animateFor(ACTIVE_MS, alwaysOnTick = false)
+            return
+        }
         // Feed -> Play (or Medicine when ill) -> Clean -> nothing.
         val order: List<Action?> = PetStore.get(applicationContext).actions() + listOf(null)
         selected = order[(order.indexOf(selected) + 1) % order.size]
@@ -226,6 +253,7 @@ class GlyphPetToyService : Service() {
 
     /** Shaking wakes a sleeping pet (with its wake-up animation), otherwise it's a quick play. */
     private fun onShake() {
+        if (game != null) return // shaking is part of tilting during a game
         PetStore.shake(applicationContext)
         animateFor(ACTIVE_MS, alwaysOnTick = false)
     }
@@ -306,7 +334,42 @@ class GlyphPetToyService : Service() {
         val action = selected ?: return
         if (now - selectedAt >= CONFIRM_AFTER_MS) {
             selected = null
-            PetStore.act(applicationContext, action, now)
+            val state = PetStore.get(applicationContext, now)
+            if (action == Action.PLAY && !state.sick && state.stage(now) != Stage.EGG) {
+                // Play on the Glyph Matrix: a tilt game, taking turns between Catch and Roll.
+                game = if (nextGameIsCatch) CatchGame(now) else RollGame(now)
+                nextGameIsCatch = !nextGameIsCatch
+                animateFor(GAME_HOLD_MS, alwaysOnTick = false)
+            } else {
+                PetStore.act(applicationContext, action, now)
+            }
+        }
+    }
+
+    /** One frame of a tilt game, then its result, then back to normal. */
+    private fun runGame(g: GlyphGame, now: Long) {
+        val manager = matrix ?: return
+        if (!connected) return
+        val state = PetStore.get(applicationContext, now)
+        val grid = DotGrid(25, 25)
+        when {
+            g.playing(now) -> {
+                g.step(now, sensors.ax, sensors.ay, state)
+                g.draw(grid, state, now)
+            }
+            !g.finished(now) -> g.drawResult(grid, state, now)
+            else -> {
+                game = null
+                PetStore.played(applicationContext, g.won, now)
+                animateFor(ACTIVE_MS, alwaysOnTick = false)
+                return
+            }
+        }
+        for (y in 0 until 25) for (x in 0 until 25) if (!GlyphShape.contains(x, y)) grid.set(x, y, 0)
+        try {
+            manager.setMatrixFrame(IntArray(grid.levels.size) { grid.levels[it] * 4095 / 255 })
+        } catch (e: Exception) {
+            Log.w(TAG, "setMatrixFrame failed", e)
         }
     }
 
@@ -347,7 +410,7 @@ class GlyphPetToyService : Service() {
     private fun draw(now: Long, animate: Boolean, dim: Boolean) {
         val manager = matrix ?: return
         if (!connected) return
-        val state = PetStore.get(applicationContext, now)
+        val state = PetStore.get(applicationContext, now, lookingNow = animate)
         val progress = if (selected != null) (now - selectedAt).toFloat() / CONFIRM_AFTER_MS else 0f
         val sinceHello = now - helloAt
         val hello = if (helloAt > 0L && sinceHello < HELLO_MS) sinceHello.toFloat() / HELLO_MS else -1f
@@ -355,6 +418,7 @@ class GlyphPetToyService : Service() {
             state, now, animate, selected, progress,
             hello = hello,
             weather = Weather.current(applicationContext, now),
+            poke = now - pokedAt < POKE_MS,
         )
         val frame = IntArray(grid.levels.size) { i ->
             val level = if (dim) grid.levels[i] * 6 / 10 else grid.levels[i]
@@ -368,15 +432,22 @@ class GlyphPetToyService : Service() {
         }
     }
 
-    private companion object {
-        const val TAG = "GlyphPet"
-        const val FRAME_MS = 100L
-        const val CONFIRM_AFTER_MS = 2_400L
-        const val ACTIVE_MS = 60_000L
-        const val AOD_BURST_MS = 4_000L
-        const val HELLO_MS = 2_500L
-        const val CHARGER_SHOW_MS = 6_000L
-        const val LIGHT_CHECK_EVERY_MS = 2 * 60_000L
-        const val LIGHT_LOOK_MS = 1_500L
+    companion object {
+        /** True while Glyph Pet is the selected Glyph Toy (nudges stay quiet then). */
+        @Volatile var active = false
+            private set
+
+        private const val TAG = "GlyphPet"
+        private const val FRAME_MS = 100L
+        private const val GAME_FRAME_MS = 50L
+        private const val GAME_HOLD_MS = GlyphGame.DURATION_MS + GlyphGame.SCORE_SHOW_MS + 2_000L
+        private const val POKE_MS = 1_500L
+        private const val CONFIRM_AFTER_MS = 2_400L
+        private const val ACTIVE_MS = 60_000L
+        private const val AOD_BURST_MS = 4_000L
+        private const val HELLO_MS = 2_500L
+        private const val CHARGER_SHOW_MS = 6_000L
+        private const val LIGHT_CHECK_EVERY_MS = 2 * 60_000L
+        private const val LIGHT_LOOK_MS = 1_500L
     }
 }

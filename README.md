@@ -38,6 +38,10 @@ Everything is explained in the app: tap **GUIDE** on the pet screen.
 | `GameActivity.kt` | Mini-games: Left or Right, Higher or Lower. |
 | `Status.kt` | Short status words and meters shown on the pet screen. |
 | `MeetActivity.kt` | Meeting other Glyph Pets over Bluetooth, and the friends list. |
+| `AlbumActivity.kt` / `Album.kt` | The Album: forms found, past generations, friends, walking records. |
+| `Season.kt` | Special days (birthday 10 June, Lunar New Year, Halloween, Christmas, New Year). |
+| `GlyphGames.kt` | Tilt games on the Glyph Matrix: Catch and Roll. |
+| `Nudges.kt` | Optional Glyph nudges when the pet needs something. |
 | `Guide.kt` / `GuideActivity.kt` | The in-app Guide. Update it whenever how you care for the pet changes. |
 
 The pet never runs in the background. Whenever anything shows it, `PetState.advanceTo()` works out what happened since it was last looked at.

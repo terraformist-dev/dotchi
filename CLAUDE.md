@@ -50,3 +50,19 @@ significant-motion, a wake-up light sensor if present, or a short light check ev
 Lock screen: tried in build 7 (keyguard widget + notification card) and removed at the owner's
 request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after build 7. Meet (`MeetActivity`): BLE advertise + scan, manufacturer data 0xFFFF with payload
 `'G','P',version,formCode,id(4 bytes)`; RSSI > -75 counts as close; boost once per friend per day.
+
+## Life cycle, cutscenes, extras (build 9)
+
+- Pet name (`PetState.name`) is shown **only in the app** (dot title), never on widget or Glyph.
+- Adults leave after `ADULT_MS` (14 days): `advanceTo` swaps in a new-generation egg and sets
+  `farewellPending`/`albumPending`. One-off animations (`Cutscene.GROW`, `Cutscene.FAREWELL`) only
+  start from `PetStore.get(lookingNow = true)` (app and Glyph Toy, not the widget).
+- `Album` keeps forms seen, past generations and step records; `Friends` keeps friends.
+- `Season`: 10 June birthday (party hat), Lunar New Year (computed with `android.icu.util.ChineseCalendar`,
+  3 days, lantern), Halloween (pumpkin), 24-26 Dec (Santa), 31 Dec-1 Jan (party hat, fireworks).
+- Weather affects needs via `Climate` (rain: restless but play x1.5; snow: happier; >=27°C: hungrier).
+- Daycare: once a day, up to 8 hours, needs at 25%, no mess/illness/neglect.
+- Glyph Play starts a tilt game (`GlyphGames.kt`: Catch, Roll), alternating; button taps can't be used
+  (a quick tap switches toys). Tilt assumes the matrix is viewed from the back with x to the right.
+- Glyph nudges (`Nudges`): opt-in switch inside the Guide; half-hourly inexact alarm to
+  `PetWidgetProvider` (action NUDGE); blinks the need icon via `setAppMatrixFrame` when face-down.

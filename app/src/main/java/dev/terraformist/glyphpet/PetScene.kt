@@ -12,6 +12,7 @@ private class Body(
     val eyeWidth: Int,
     val mouthX: Int,
     val mouthY: Int,
+    val headY: Int = 0, // first full row of the head (hats sit on it)
 )
 
 private object Art {
@@ -57,7 +58,7 @@ private object Art {
             "..#######..",
             "..##...##..",
         ),
-        eyeLeftX = 3, eyeRightX = 7, eyeY = 4, eyeWidth = 1, mouthX = 5, mouthY = 7,
+        eyeLeftX = 3, eyeRightX = 7, eyeY = 4, eyeWidth = 1, mouthX = 5, mouthY = 7, headY = 2,
     )
 
     // Child, often neglected: a lumpy blob with stubby feet.
@@ -94,7 +95,7 @@ private object Art {
             "..##.....##..",
             "..##.....##..",
         ),
-        eyeLeftX = 3, eyeRightX = 8, eyeY = 5, eyeWidth = 2, mouthX = 6, mouthY = 8,
+        eyeLeftX = 3, eyeRightX = 8, eyeY = 5, eyeWidth = 2, mouthX = 6, mouthY = 8, headY = 2,
     )
 
     // Adult, decent care: round, with a sprout on top.
@@ -114,7 +115,7 @@ private object Art {
             "...#######...",
             "...##...##...",
         ),
-        eyeLeftX = 3, eyeRightX = 8, eyeY = 5, eyeWidth = 2, mouthX = 6, mouthY = 8,
+        eyeLeftX = 3, eyeRightX = 8, eyeY = 5, eyeWidth = 2, mouthX = 6, mouthY = 8, headY = 3,
     )
 
     // Adult, poor care: a wide, low, drippy blob.
@@ -212,6 +213,38 @@ private object Art {
         ".....",
         "####.",
     )
+    // Seasonal hats and decorations. '#' is drawn in red, '+' in white.
+    val PARTY_HAT = Sprite(
+        "..+..",
+        "..#..",
+        ".###.",
+        "#####",
+    )
+    val PUMPKIN_HAT = Sprite(
+        "..+..",
+        ".###.",
+        "#####",
+    )
+    val SANTA_HAT = Sprite(
+        "....+",
+        "..##.",
+        ".###.",
+        "+++++",
+    )
+    val LANTERN = Sprite(
+        ".+.",
+        "###",
+        "###",
+        "###",
+        ".+.",
+    )
+    val HOUSE = Sprite(
+        "..#..",
+        ".###.",
+        "#####",
+        "#.#.#",
+        "#.###",
+    )
     val HAND = Sprite(
         "##",
         "##",
@@ -227,6 +260,13 @@ private object Art {
         Action.PLAY -> PLAY
         Action.CLEAN -> CLEAN
         Action.MEDICINE -> PILL
+    }
+
+    fun hat(season: Season?): Sprite? = when (season) {
+        Season.BIRTHDAY, Season.NEW_YEAR -> PARTY_HAT
+        Season.HALLOWEEN -> PUMPKIN_HAT
+        Season.CHRISTMAS -> SANTA_HAT
+        else -> null
     }
 
     fun body(stage: Stage, form: Form?): Body = when (form) {
@@ -263,6 +303,8 @@ object PetScene {
      * @param hud false hides the icons above the pet.
      * @param hello 0..1 progress of the hello wave, or negative for none.
      * @param weather local weather to show (falling rain/snow, a little sky icon), if known.
+     * @param season a special day to dress up for (hats, confetti, lanterns).
+     * @param poke the egg was just tapped: give it a wobble.
      */
     fun render(
         state: PetState,
@@ -277,7 +319,10 @@ object PetScene {
         hud: Boolean = true,
         hello: Float = -1f,
         weather: WeatherNow? = null,
+        season: Season? = Season.on(now),
+        poke: Boolean = false,
     ): DotGrid {
+        if (state.isFarewell(now)) return mask(renderFarewell(state, now, anim, season))
         val g = DotGrid(SIZE, SIZE)
         val greeting = hello >= 0f && hello <= 1f
         val mood = when {
@@ -291,11 +336,15 @@ object PetScene {
         if (weather != null) drawWeather(g, weather, anim, animate)
 
         if (stage == Stage.EGG) {
-            drawEgg(g, state, now, anim, animate)
+            drawEgg(g, state, now, anim, animate, poke)
         } else {
             drawPoops(g, state.poops, anim, animate)
             val waking = if (mood == Mood.WAKING) (now - state.wokenAt).toFloat() / PetState.WAKING_ANIM_MS else -1f
-            drawPet(g, Art.body(stage, state.form(now)), mood, anim, animate, look, greeting, waking)
+            val growing = if (mood == Mood.GROWING) (now - state.cutsceneAt).toFloat() / PetState.GROW_MS else -1f
+            drawPet(
+                g, Art.body(stage, state.form(now)), mood, anim, animate, look, greeting, waking,
+                season = season, growing = growing,
+            )
         }
 
         // Walking: the ground slides past underneath.
@@ -308,33 +357,90 @@ object PetScene {
                 g.text(topText, x, 1)
             }
             hud -> {
-                drawTop(g, state, mood, anim, animate, selected, selectProgress)
-                if (weather != null && selected == null) drawSkyIcon(g, weather)
+                drawTop(g, state, mood, anim, animate, selected, selectProgress, now)
+                if (selected == null) {
+                    if (weather != null) drawSkyIcon(g, weather)
+                    if (season != null && stage != Stage.EGG) drawSeasonExtras(g, season, anim, animate)
+                }
             }
         }
+        return mask(g)
+    }
 
-        // Anything outside the real matrix shape stays dark.
+    /** Anything outside the real matrix shape stays dark. */
+    private fun mask(g: DotGrid): DotGrid {
         for (y in 0 until SIZE) for (x in 0 until SIZE) {
             if (!GlyphShape.contains(x, y)) g.set(x, y, 0)
         }
         return g
     }
 
+    /**
+     * Goodbye: the old adult waves, then walks off to the right on its adventure,
+     * and the egg it left behind fades in.
+     */
+    private fun renderFarewell(state: PetState, now: Long, anim: Long, season: Season?): DotGrid {
+        val g = DotGrid(SIZE, SIZE)
+        val p = ((now - state.cutsceneAt).toFloat() / PetState.FAREWELL_MS).coerceIn(0f, 1f)
+        val walk = ((p - 0.35f) / 0.5f).coerceIn(0f, 1f)
+        val body = Art.body(Stage.ADULT, state.farewellForm ?: Form.GLOOP)
+        drawPet(
+            g, body, if (walk > 0f) Mood.WALKING else Mood.HAPPY, anim, animate = true,
+            look = if (walk > 0f) 1 else 0, waving = walk == 0f, waking = -1f,
+            centerX = CENTER_X + (walk * 20).toInt(), season = season,
+        )
+        if (p > 0.65f) {
+            val level = (((p - 0.65f) / 0.25f).coerceIn(0f, 1f) * 255).toInt().coerceAtLeast(40)
+            g.stamp(Art.EGG, CENTER_X - Art.EGG.width / 2, FEET_Y - Art.EGG.height + 1, level)
+        }
+        drawGround(g, if (walk > 0f && walk < 1f) ((anim / 200) % 2).toInt() else 0)
+        return g
+    }
+
+    // ---- Public helpers for the Glyph games and the Album -------------------------------
+
+    /** Draw this pet anywhere on a grid (for the Glyph games). */
+    fun drawPetAt(g: DotGrid, state: PetState, now: Long, centerX: Int, feetY: Int, mood: Mood, anim: Long, look: Int = 0) {
+        drawPet(g, Art.body(state.stage(now), state.form(now)), mood, anim, animate = true, look = look,
+            waving = false, waking = -1f, centerX = centerX, feetY = feetY)
+    }
+
+    /** Width of this pet's body in dots. */
+    fun bodyWidth(state: PetState, now: Long): Int = Art.body(state.stage(now), state.form(now)).sprite.width
+
+    fun bodyHeight(state: PetState, now: Long): Int = Art.body(state.stage(now), state.form(now)).sprite.height
+
+    /** A big, simple frame for a Glyph nudge: the icon of what the pet needs, three times size. */
+    fun nudgeFrame(need: Action, on: Boolean): DotGrid {
+        val g = DotGrid(SIZE, SIZE)
+        if (!on) return g
+        val icon = Art.icon(need)
+        for (y in 0 until icon.height) for (x in 0 until icon.width) {
+            if (icon.at(x, y) == '#') {
+                for (dy in 0 until 3) for (dx in 0 until 3) g.set(5 + x * 3 + dx, 5 + y * 3 + dy, 255)
+            }
+        }
+        return mask(g)
+    }
+
+    /** A small picture of a form for the Album: drawn properly if [known], otherwise a faint outline. */
+    fun portrait(code: Int, known: Boolean): DotGrid {
+        val g = DotGrid(15, 15)
+        val body = Art.body(if (code <= 1) Stage.BABY else Stage.CHILD, PetState.formOfCode(code))
+        if (known) {
+            drawPet(g, body, Mood.HAPPY, 0L, animate = false, look = 0, waving = false, waking = -1f,
+                centerX = 7, feetY = 13)
+        } else {
+            g.stamp(body.sprite, 7 - body.sprite.width / 2, 13 - body.sprite.height + 1, level = 35)
+        }
+        for (x in 1 until 15 step 2) g.set(x, 14, 30)
+        return g
+    }
+
     // ---- Meeting another Glyph Pet ----------------------------------------------------
 
     /** A one-byte code for which pet this is, sent to other phones when meeting. */
-    fun formCode(state: PetState, now: Long): Int = when (state.stage(now)) {
-        Stage.EGG -> 0
-        Stage.BABY -> 1
-        else -> when (state.form(now)) {
-            Form.PIP -> 2
-            Form.GRUB -> 3
-            Form.NOVA -> 4
-            Form.BUD -> 5
-            Form.GLOOP -> 6
-            null -> 1
-        }
-    }
+    fun formCode(state: PetState, now: Long): Int = state.formCode(now)
 
     fun nameForCode(code: Int): String = when (code) {
         0 -> "EGG"
@@ -431,11 +537,11 @@ object PetScene {
         g.stamp(icon, 4, 4, level = 90)
     }
 
-    private fun drawEgg(g: DotGrid, state: PetState, now: Long, anim: Long, animate: Boolean) {
+    private fun drawEgg(g: DotGrid, state: PetState, now: Long, anim: Long, animate: Boolean, poke: Boolean) {
         val egg = Art.EGG
         val age = now - state.bornAt
         val nearlyHatched = age > PetState.EGG_MS * 6 / 10
-        val wobble = if (animate && nearlyHatched) intArrayOf(0, 1, 0, -1)[((anim / 200) % 4).toInt()] else 0
+        val wobble = if (animate && (nearlyHatched || poke)) intArrayOf(0, 1, 0, -1)[((anim / 200) % 4).toInt()] else 0
         val left = CENTER_X - egg.width / 2 + wobble
         val top = FEET_Y - egg.height + 1
         g.stamp(egg, left, top)
@@ -471,8 +577,12 @@ object PetScene {
         waking: Float,
         centerX: Int = CENTER_X,
         feetY: Int = FEET_Y,
+        season: Season? = null,
+        growing: Float = -1f,
     ) {
         val sprite = body.sprite
+        // Growing up: flickers in and out among sparkles, then settles.
+        val flicker = growing in 0f..0.6f && animate && (anim / 110) % 2 == 0L
         // Waking up: first a sleepy wriggle, then a jump with wide eyes.
         val wakingWriggle = waking in 0f..0.3f
         val wakingJump = waking > 0.3f
@@ -494,6 +604,7 @@ object PetScene {
         val left = centerX - sprite.width / 2 + shiver + dash + wriggle
         val top = feetY - sprite.height + 1 - lift
         val level = when {
+            flicker -> 60
             mood == Mood.SLEEPING || wakingWriggle -> 150
             mood == Mood.SICK -> 120
             else -> 255
@@ -516,6 +627,18 @@ object PetScene {
             }
         }
 
+        // Special days: a hat sitting on its head.
+        Art.hat(season)?.let { hat ->
+            val hx = centerX + (left - (centerX - sprite.width / 2)) - hat.width / 2
+            val hy = top + body.headY - hat.height
+            for (y in 0 until hat.height) for (x in 0 until hat.width) {
+                when (hat.at(x, y)) {
+                    '#' -> g.set(hx + x, hy + y, 255, red = true)
+                    '+' -> g.set(hx + x, hy + y, 255)
+                }
+            }
+        }
+
         // Hello: a little hand waving beside it.
         if (waving) {
             val up = (anim / 220) % 2 == 0L
@@ -526,7 +649,7 @@ object PetScene {
         val mx = left + body.mouthX + look
         val my = top + body.mouthY
         when (mood) {
-            Mood.HAPPY, Mood.PLAYING, Mood.CLEANING, Mood.WALKING -> smile(g, mx, my)
+            Mood.HAPPY, Mood.PLAYING, Mood.CLEANING, Mood.WALKING, Mood.GROWING -> smile(g, mx, my)
             Mood.WAKING -> if (wakingWriggle) flat(g, mx, my) else openMouth(g, mx, my)
             Mood.SAD, Mood.SICK -> frown(g, mx, my)
             Mood.EATING -> if (!animate || (anim / 250) % 2 == 0L) openMouth(g, mx, my) else flat(g, mx, my)
@@ -562,9 +685,15 @@ object PetScene {
         animate: Boolean,
         selected: Action?,
         selectProgress: Float,
+        now: Long,
     ) {
         val iconX = 10
         val iconY = 1
+
+        // At daycare: a little house in the corner.
+        if (selected == null && state.isAtDaycare(now) && mood != Mood.SLEEPING) {
+            g.stamp(Art.HOUSE, 17, 4, level = 110)
+        }
 
         if (selected != null) {
             g.stamp(Art.icon(selected), iconX, iconY, red = true)
@@ -593,12 +722,58 @@ object PetScene {
                     g.stamp(Art.ZED, 16, 3 - rise, level = 170)
                 }
             }
+            Mood.GROWING -> {
+                // Sparkles circling round it.
+                val spots = listOf(4 to 7, 19 to 6, 3 to 13, 20 to 12, 7 to 3, 16 to 3)
+                val phase = ((anim / 150) % spots.size).toInt()
+                for (i in spots.indices) {
+                    if ((i + phase) % 2 == 0) g.stamp(Art.SPARK, spots[i].first, spots[i].second)
+                }
+            }
             Mood.SAD, Mood.SICK -> {
                 val need = state.mostNeeded()
                 if (need != null) {
                     val on = !animate || (anim / 600) % 2 == 0L
                     if (on) g.stamp(Art.icon(need), iconX, iconY, red = true)
                 }
+            }
+            else -> {}
+        }
+    }
+
+    /** Extra touches on special days (hats are drawn with the pet). */
+    private fun drawSeasonExtras(g: DotGrid, season: Season, anim: Long, animate: Boolean) {
+        val t = if (animate) anim else 0L
+        when (season) {
+            Season.BIRTHDAY -> {
+                // Confetti drifting down.
+                val columns = intArrayOf(3, 6, 18, 21, 9, 15)
+                columns.forEachIndexed { i, x ->
+                    val y = ((t / 220 + i * 4) % 17).toInt() + 1
+                    g.set(x, y, 200, red = i % 2 == 0)
+                }
+            }
+            Season.NEW_YEAR -> {
+                // Two little fireworks bursting in turn.
+                val burst = ((t / 400) % 4).toInt()
+                val (cx, cy) = if ((t / 1600) % 2 == 0L) 5 to 6 else 19 to 5
+                val r = burst.coerceAtMost(2)
+                for ((dx, dy) in listOf(-1 to 0, 1 to 0, 0 to -1, 0 to 1, -1 to -1, 1 to 1, -1 to 1, 1 to -1)) {
+                    g.set(cx + dx * r, cy + dy * r, if (burst == 3) 60 else 220, red = burst == 1)
+                }
+            }
+            Season.CHINESE_NEW_YEAR -> {
+                // A red lantern swaying on the right, and a few sparks.
+                val sway = if ((t / 700) % 2 == 0L) 0 else 1
+                g.set(19 + sway, 3, 120)
+                for (y in 0 until Art.LANTERN.height) for (x in 0 until Art.LANTERN.width) {
+                    when (Art.LANTERN.at(x, y)) {
+                        '#' -> g.set(18 + sway + x, 4 + y, 255, red = true)
+                        '+' -> g.set(18 + sway + x, 4 + y, 200)
+                    }
+                }
+                val spark = ((t / 300) % 3).toInt()
+                g.set(5 + spark, 5 - spark, 200, red = true)
             }
             else -> {}
         }
