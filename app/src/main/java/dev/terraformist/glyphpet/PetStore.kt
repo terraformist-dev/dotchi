@@ -129,14 +129,6 @@ object PetStore {
     fun metFriend(context: Context, now: Long = System.currentTimeMillis()): PetState =
         update(context, now) { it.metFriend(now) }
 
-    /** End a nap caused by darkness (e.g. the phone was flipped over to say hello). */
-    fun wakeFromDarkNap(context: Context, now: Long = System.currentTimeMillis()) {
-        synchronized(lock) {
-            val s = current(context, now).first
-            if (s.nap == Nap.DARK) save(context, s.wake(now))
-        }
-    }
-
     /** Feed / play / clean / medicine, save, and refresh every place the pet is shown. */
     fun act(context: Context, action: Action, now: Long = System.currentTimeMillis()): PetState {
         val rainy = climate(context, now)?.rainy == true

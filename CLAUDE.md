@@ -66,3 +66,4 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   (a quick tap switches toys). Tilt assumes the matrix is viewed from the back with x to the right.
 - Glyph nudges (`Nudges`): opt-in switch inside the Guide; half-hourly inexact alarm to
   `PetWidgetProvider` (action NUDGE); blinks the need icon via `setAppMatrixFrame` when face-down.
+- Hello wave (toy picked / flipped face-down) only when the pet is awake: not egg, not `isAsleep` (night or nap). It never wakes the pet.

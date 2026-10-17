@@ -76,7 +76,7 @@ object Guide {
                 "just woken it.\n\nFeeding, cleaning or playing with it wakes it for a minute. Shaking it " +
                 "wakes it for about 15 minutes, even on the charger.\n\nThe light sensor is on the screen " +
                 "side of the phone, so it can't see the light while the phone is face-down. If it's " +
-                "napping and the phone is face-down, shake it or flip it over and back to wake it.\n\nThe " +
+                "napping and the phone is face-down, give it a shake to wake it.\n\nThe " +
                 "widget only refreshes about every half hour, so a nap can take a little while to show " +
                 "there.",
         ),
@@ -174,7 +174,7 @@ object Guide {
                 "happens. Long-press until nothing is shown to cancel. While it's still an egg, a " +
                 "long-press just makes it wobble.\n\nYou can also shake the phone to play, or to wake " +
                 "it.\n\nEach time you pick Glyph Pet, or turn the phone face-down while it's awake, it " +
-                "waves hello. Saying hello also wakes it from a dark-room nap.\n\nYour pet animates for a " +
+                "waves hello. It only waves when it's awake, not while it's asleep or napping (in the dark or on the charger).\n\nYour pet animates for a " +
                 "minute after you touch the back button. If you leave it on the always-on Glyph, it wakes " +
                 "for a little bounce once a minute.",
         ),

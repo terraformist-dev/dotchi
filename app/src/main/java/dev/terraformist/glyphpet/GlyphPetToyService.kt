@@ -36,7 +36,7 @@ import com.nothing.ketchum.GlyphToy
  *
  * Motion (while the pet is awake on the matrix):
  *  - Shake the phone: wakes it if it's asleep, otherwise a quick play.
- *  - Turn the phone face-down: the pet waves hello (also when the toy is picked).
+ *  - Turn the phone face-down: the pet waves hello (also when the toy is picked), if awake.
  *
  * Waking from a dark-room nap without the app: we watch for the screen turning on, the
  * charger, the phone being moved, and the light sensor (continuously if the phone has a
@@ -323,11 +323,14 @@ class GlyphPetToyService : Service() {
         }
     }
 
-    /** The pet waves hello. Also wakes it from a dark-room nap. */
+    /** The pet waves hello, if it's awake. */
     private fun sayHello() {
-        helloAt = System.currentTimeMillis()
-        PetStore.wakeFromDarkNap(applicationContext)
+        val now = System.currentTimeMillis()
+        val state = PetStore.get(applicationContext, now)
         animateFor(ACTIVE_MS, alwaysOnTick = false)
+        // Only an awake pet waves: not an egg, not asleep, not napping (in the dark or on the charger).
+        if (state.stage(now) == Stage.EGG || state.isAsleep(now)) return
+        helloAt = now
     }
 
     private fun confirmSelectionIfDue(now: Long) {
