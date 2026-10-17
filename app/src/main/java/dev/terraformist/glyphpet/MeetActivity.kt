@@ -21,11 +21,11 @@ import android.widget.TextView
 import kotlin.random.Random
 
 /**
- * Meet another Glyph Pet. Both phones open this screen; each quietly announces its pet over
+ * Meet another Dotchi. Both phones open this screen; each quietly announces its pet over
  * Bluetooth and listens for others. When another pet is close by (about arm's length), the
  * two appear side by side. The first meeting with each friend each day cheers your pet up.
  *
- * Only a tiny anonymous message is shared: "this is a Glyph Pet", which kind it is, and a
+ * Only a tiny anonymous message is shared: "this is a Dotchi", which kind it is, and a
  * random number that tells friends apart. No names, accounts or location.
  */
 class MeetActivity : Activity() {
@@ -227,7 +227,7 @@ class MeetActivity : Activity() {
 
     private companion object {
         const val TAG = "GlyphPet"
-        const val SEARCHING = "LOOKING FOR GLYPH PETS NEARBY. HOLD THE PHONES CLOSE TOGETHER."
+        const val SEARCHING = "LOOKING FOR OTHER DOTCHI NEARBY. HOLD THE PHONES CLOSE TOGETHER."
 
         // 0xFFFF is the Bluetooth company ID set aside for testing and hobby projects.
         const val COMPANY_ID = 0xFFFF

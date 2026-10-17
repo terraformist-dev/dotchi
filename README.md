@@ -1,6 +1,6 @@
-# Glyph Pet
+# Dotchi
 
-A Tamagotchi-style pet for the Nothing Phone (3) that lives in two places at once:
+Dotchi (formerly Glyph Pet) is a Tamagotchi-style pet for the Nothing Phone (3) that lives in two places at once:
 
 - **Home-screen widget**: the pet on a dot grid, with Feed / Play / Clean buttons.
 - **Glyph Toy**: the same pet on the 25×25 Glyph Matrix on the back of the phone.
@@ -12,7 +12,7 @@ Both read and write the same saved pet, so feeding it in one place shows up in t
 Every push to `main` builds the app in the cloud (GitHub Actions) and publishes it as a release.
 
 1. On your phone, open **Releases → Latest** on this repo's GitHub page.
-2. Tap **glyph-pet.apk** to download it.
+2. Tap **dotchi.apk** to download it.
 3. Open the download and tap **Install** (allow your browser to install apps the first time).
 
 New builds install over the old one, and the pet is kept.
@@ -37,7 +37,7 @@ Everything is explained in the app: tap **GUIDE** on the pet screen.
 | `MainActivity.kt` | The main pet screen. |
 | `GameActivity.kt` | Mini-games: Left or Right, Higher or Lower. |
 | `Status.kt` | Short status words and meters shown on the pet screen. |
-| `MeetActivity.kt` | Meeting other Glyph Pets over Bluetooth, and the friends list. |
+| `MeetActivity.kt` | Meeting other Dotchi over Bluetooth, and the friends list. |
 | `AlbumActivity.kt` / `Album.kt` | The Album: forms found, past generations, friends, walking records. |
 | `Season.kt` | Special days (birthday 10 June, Lunar New Year, Halloween, Christmas, New Year). |
 | `GlyphGames.kt` | Tilt games on the Glyph Matrix: Catch and Roll. |

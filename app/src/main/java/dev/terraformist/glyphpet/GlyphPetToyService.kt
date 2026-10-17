@@ -436,7 +436,7 @@ class GlyphPetToyService : Service() {
     }
 
     companion object {
-        /** True while Glyph Pet is the selected Glyph Toy (nudges stay quiet then). */
+        /** True while Dotchi is the selected Glyph Toy (nudges stay quiet then). */
         @Volatile var active = false
             private set
 

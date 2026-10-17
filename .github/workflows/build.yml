@@ -28,20 +28,20 @@ jobs:
           ./gradlew assembleDebug --stacktrace
 
       - name: Name the file
-        run: cp app/build/outputs/apk/debug/app-debug.apk glyph-pet.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk dotchi.apk
 
       - name: Keep a copy with this run
         uses: actions/upload-artifact@v4
         with:
-          name: glyph-pet-apk
-          path: glyph-pet.apk
+          name: dotchi-apk
+          path: dotchi.apk
 
       - name: Publish as the latest download
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "build-${{ github.run_number }}" glyph-pet.apk \
+          gh release create "build-${{ github.run_number }}" dotchi.apk \
             --target "${{ github.sha }}" \
-            --title "Glyph Pet · build ${{ github.run_number }}" \
-            --notes "Tap **glyph-pet.apk** below to download, then open it to install." \
+            --title "Dotchi · build ${{ github.run_number }}" \
+            --notes "Tap **dotchi.apk** below to download, then open it to install." \
             --latest

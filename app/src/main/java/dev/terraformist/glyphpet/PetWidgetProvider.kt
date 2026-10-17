@@ -1,5 +1,6 @@
 package dev.terraformist.glyphpet
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -9,12 +10,20 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.widget.RemoteViews
 
 /** The home-screen widget: the pet on a dot grid, with Feed / Play / Clean buttons underneath. */
 class PetWidgetProvider : AppWidgetProvider() {
 
+    override fun onEnabled(context: Context) = keepTicking(context)
+
+    override fun onDisabled(context: Context) {
+        alarms(context).cancel(tickIntent(context))
+    }
+
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        keepTicking(context)
         // Every half hour: take a quick look at the light and charger first, so naps start and end.
         val pending = goAsync()
         Senses.sample(context) {
@@ -26,6 +35,11 @@ class PetWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_TICK) {
+            // About once a minute, but only while the phone is awake (see keepTicking).
+            refreshAll(context)
+            return
+        }
         if (intent.action == Nudges.ACTION) {
             // Half-hourly: refresh the widget, and maybe blink a nudge on the Glyph Matrix.
             val pending = goAsync()
@@ -54,6 +68,34 @@ class PetWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val ACTION_PET = "dev.terraformist.glyphpet.PET_ACTION"
+        private const val ACTION_TICK = "dev.terraformist.glyphpet.WIDGET_TICK"
+
+        /**
+         * Redraw the widget about once a minute while the phone is awake. This uses a
+         * "non-waking" alarm: while the screen is off and the phone is asleep it simply waits,
+         * then fires as soon as the phone wakes up, so the widget is also refreshed right when
+         * you turn the screen on. Android may space these out a little to save battery.
+         */
+        fun keepTicking(context: Context) {
+            if (AppWidgetManager.getInstance(context)
+                    .getAppWidgetIds(ComponentName(context, PetWidgetProvider::class.java)).isEmpty()
+            ) return
+            alarms(context).setRepeating(
+                AlarmManager.ELAPSED_REALTIME,
+                SystemClock.elapsedRealtime() + 60_000L,
+                60_000L,
+                tickIntent(context),
+            )
+        }
+
+        private fun alarms(context: Context) = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        private fun tickIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+            context,
+            300,
+            Intent(context, PetWidgetProvider::class.java).setAction(ACTION_TICK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         private const val EXTRA_ACTION = "action"
 
         private val FRAME_IDS = intArrayOf(R.id.pet_0, R.id.pet_1, R.id.pet_2, R.id.pet_3, R.id.pet_4, R.id.pet_5)

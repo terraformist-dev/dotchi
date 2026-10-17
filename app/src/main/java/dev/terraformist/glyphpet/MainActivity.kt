@@ -261,6 +261,7 @@ class MainActivity : Activity() {
         sensors.start()
         Weather.refreshIfStale(this) { render() }
         Nudges.keepScheduled(this)
+        PetWidgetProvider.keepTicking(this)
         PetWidgetProvider.refreshAll(this)
     }
 
@@ -279,8 +280,8 @@ class MainActivity : Activity() {
             DotPainter.paintPet(PetScene.render(state, now, animate = true, weather = weather, poke = poked), pitch = 24)
         )
 
-        // The name (or "GLYPH PET" until it has one), written in dots. Only redrawn when it changes.
-        val title = state.name.ifEmpty { "GLYPH PET" }
+        // The name (or "DOTCHI" until it has one), written in dots. Only redrawn when it changes.
+        val title = state.name.ifEmpty { "DOTCHI" }
         if (title != shownTitle) {
             titleView.setImageBitmap(dotTitle(title))
             shownTitle = title

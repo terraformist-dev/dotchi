@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Glyph Pet</string>
+    <string name="app_name">Dotchi</string>
     <string name="toy_summary">A tiny pet that lives on your Glyph Matrix. Long-press to pick an action, then wait.</string>
-    <string name="widget_description">Your Glyph Pet on the home screen</string>
+    <string name="widget_description">Your Dotchi on the home screen</string>
     <string name="reset_label">START OVER WITH A NEW EGG</string>
     <string name="reset_title">Start over?</string>
     <string name="reset_message">Your current pet will be replaced by a new egg.</string>
@@ -11,7 +11,7 @@
     <string name="meet_button">MEET</string>
     <string name="album_button">ALBUM</string>
     <string name="permissions_title">Walks and weather</string>
-    <string name="permissions_message">Your pet can come on walks with you, using your phone\'s step counter, and react to the weather where you are, using your approximate location. Nothing leaves your phone except a rough location sent to a free weather service. You can change this later in your phone\'s settings.</string>
+    <string name="permissions_message">Your Dotchi can come on walks with you, using your phone\'s step counter, and react to the weather where you are, using your approximate location. Nothing leaves your phone except a rough location sent to a free weather service. You can change this later in your phone\'s settings.</string>
     <string name="permissions_ok">Allow</string>
     <string name="permissions_no">Not now</string>
 </resources>

@@ -437,7 +437,7 @@ object PetScene {
         return g
     }
 
-    // ---- Meeting another Glyph Pet ----------------------------------------------------
+    // ---- Meeting another Dotchi -------------------------------------------------------
 
     /** A one-byte code for which pet this is, sent to other phones when meeting. */
     fun formCode(state: PetState, now: Long): Int = state.formCode(now)

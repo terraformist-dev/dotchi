@@ -1,13 +1,17 @@
-# Glyph Pet: notes for Claude
+# Dotchi (repo glyph-pet): notes for Claude
 
 Owner has no coding experience and works only from a phone. Explain changes in plain English,
 never ask them to run commands, and always finish by pushing to `main` and confirming the
-GitHub Actions build went green (the build publishes `glyph-pet.apk` as the latest release).
+GitHub Actions build went green (the build publishes `dotchi.apk` as the latest release).
+
+The app is called **Dotchi** (renamed from Glyph Pet in build 12). Code names (package
+`dev.terraformist.glyphpet`, class names, repo `glyph-pet`) stay as they are.
 
 ## The Guide must stay current
 
 The in-app Guide (`app/src/main/java/dev/terraformist/glyphpet/Guide.kt`) is written for someone
-who has never had a virtual pet. **Any change that affects how a person looks after or interacts
+who has never had a virtual pet. The owner rewrote it in his own words in build 12: keep his
+voice and wording, and change only what a feature change requires. **Any change that affects how a person looks after or interacts
 with the pet (actions, rules, timings, controls, screens, widget, Glyph Toy) must update the Guide
 in the same commit.** Keep the main screen uncluttered: instructions belong in the Guide, not on
 the pet screen.
@@ -67,3 +71,4 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
 - Glyph nudges (`Nudges`): opt-in switch inside the Guide; half-hourly inexact alarm to
   `PetWidgetProvider` (action NUDGE); blinks the need icon via `setAppMatrixFrame` when face-down.
 - Hello wave (toy picked / flipped face-down) only when the pet is awake: not egg, not `isAsleep` (night or nap). It never wakes the pet.
+- Widget refresh: non-wakeup repeating alarm every 60s (`PetWidgetProvider.keepTicking`), so it ticks while the phone is awake and fires on screen-on; plus the 30-minute `updatePeriodMillis`.
