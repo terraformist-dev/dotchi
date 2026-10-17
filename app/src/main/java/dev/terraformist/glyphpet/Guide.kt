@@ -134,18 +134,6 @@ object Guide {
                 "bounce once a minute.",
         ),
         Section(
-            "LOCK SCREEN",
-            "Tap PET ON LOCK SCREEN near the bottom of the pet screen to switch it on. Your pet then " +
-                "appears as a quiet card on your lock screen, with its meters and FEED, PLAY (or MEDS) " +
-                "and CLEAN buttons that work without unlocking. PLAY there is a quick play; the " +
-                "mini-games need the app.\n\nThe first time, your phone asks if Glyph Pet may show " +
-                "notifications: say yes. The card makes no sound and doesn't buzz. If you only see \"Glyph " +
-                "Pet\" with no picture on the lock screen, your phone is hiding notification contents: " +
-                "change that in Settings, under Notifications.\n\nTap it again to switch it off. The card " +
-                "updates whenever you look after your pet, and about every half hour on its own.\n\nIf " +
-                "your phone lets you add widgets to the lock screen, Glyph Pet's widget can go there too.",
-        ),
-        Section(
             "STARTING OVER",
             "At the bottom of the pet screen, START OVER gives you a new egg. Your current pet is " +
                 "gone for good, so only use it if you mean it.",

@@ -2,7 +2,10 @@ package dev.terraformist.glyphpet
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlarmManager
 import android.app.AlertDialog
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -19,7 +22,6 @@ class MainActivity : Activity() {
     private lateinit var petView: ImageView
     private lateinit var statusView: TextView
     private lateinit var buttons: List<ImageView>
-    private lateinit var lockToggle: TextView
 
     // Shake the phone: wakes it if it's asleep, otherwise a quick play.
     // The light sensor and step counter are read here too.
@@ -60,10 +62,6 @@ class MainActivity : Activity() {
             startActivity(Intent(this, MeetActivity::class.java))
         }
 
-        lockToggle = findViewById(R.id.lock_toggle)
-        lockToggle.setOnClickListener { toggleLockScreen() }
-        showLockToggle()
-
         findViewById<TextView>(R.id.reset).setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle(R.string.reset_title)
@@ -74,6 +72,29 @@ class MainActivity : Activity() {
         }
 
         askForPermissionsOnce()
+        removeOldLockScreenCard()
+    }
+
+    /**
+     * Build 7 had an optional lock-screen card. It's been removed; if it was switched on,
+     * take the card and its half-hourly refresh away.
+     */
+    private fun removeOldLockScreenCard() {
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).apply {
+            cancel(1)
+            deleteNotificationChannel("lock_screen_pet")
+        }
+        val old = PendingIntent.getBroadcast(
+            this,
+            100,
+            Intent(this, PetWidgetProvider::class.java).setAction("dev.terraformist.glyphpet.REFRESH"),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+        )
+        if (old != null) {
+            (getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(old)
+            old.cancel()
+        }
+        getSharedPreferences("app", Context.MODE_PRIVATE).edit().remove("lockScreenPet").apply()
     }
 
     /** Walks need the step counter; weather needs approximate location. Asked once, with a reason. */
@@ -97,28 +118,8 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun toggleLockScreen() {
-        if (LockScreenPet.isOn(this)) {
-            LockScreenPet.setOn(this, false)
-        } else if (LockScreenPet.canNotify(this)) {
-            LockScreenPet.setOn(this, true)
-        } else {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFY_REQUEST)
-        }
-        showLockToggle()
-    }
-
-    private fun showLockToggle() {
-        lockToggle.text = if (LockScreenPet.isOn(this)) "PET ON LOCK SCREEN: ON" else "PET ON LOCK SCREEN: OFF"
-    }
-
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == NOTIFY_REQUEST) {
-            if (LockScreenPet.canNotify(this)) LockScreenPet.setOn(this, true)
-            showLockToggle()
-            return
-        }
         if (requestCode != PERMISSIONS_REQUEST) return
         // Start counting steps and fetch the weather now that we're allowed to.
         sensors.stop()
@@ -141,7 +142,6 @@ class MainActivity : Activity() {
         handler.post(loop)
         sensors.start()
         Weather.refreshIfStale(this) { render() }
-        LockScreenPet.keepFresh(this)
         PetWidgetProvider.refreshAll(this)
     }
 
@@ -188,7 +188,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val PERMISSIONS_REQUEST = 1
-        private const val NOTIFY_REQUEST = 2
 
         /** A heading written in the dot font. */
         fun dotTitle(text: String) = DotGrid(DotFont.width(text), DotFont.HEIGHT).let { g ->

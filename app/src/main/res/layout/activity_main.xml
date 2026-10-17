@@ -114,20 +114,10 @@
         </LinearLayout>
 
         <TextView
-            android:id="@+id/lock_toggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:fontFamily="monospace"
-            android:padding="8dp"
-            android:textColor="#9A9A9A"
-            android:textSize="12sp" />
-
-        <TextView
             android:id="@+id/reset"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="32dp"
             android:fontFamily="monospace"
             android:padding="8dp"
             android:text="@string/reset_label"
