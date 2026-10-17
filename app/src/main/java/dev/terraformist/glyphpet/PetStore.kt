@@ -21,15 +21,21 @@ object PetStore {
     private var lastNapCheck = 0L
 
     /** The pet as it is right now. Also starts or ends naps based on what the phone senses. */
-    fun get(context: Context, now: Long = System.currentTimeMillis()): PetState = synchronized(lock) {
+    fun get(
+        context: Context,
+        now: Long = System.currentTimeMillis(),
+        checkNapNow: Boolean = false,
+    ): PetState = synchronized(lock) {
         val saved = load(context, now)
         var current = saved.advanceTo(now)
         var dirty = now - saved.lastTick > SAVE_EVERY_MS
-        if (now - lastNapCheck > NAP_CHECK_EVERY_MS) {
+        if (checkNapNow || now - lastNapCheck > NAP_CHECK_EVERY_MS) {
             lastNapCheck = now
-            val wanted = Senses.napReason(context, current.nap, now)
+            // Just woken up: no new nap for a while, even if it's still dark or charging.
+            val wanted = if (current.recentlyWoken(now)) null else Senses.napReason(context, current.nap, now)
             if (wanted != current.nap) {
-                current = current.withNap(wanted, now)
+                // Lights on or unplugged: wake up properly (with the stretch), not just stop napping.
+                current = if (wanted == null) current.wake(now) else current.withNap(wanted, now)
                 dirty = true
             }
         }
@@ -37,11 +43,35 @@ object PetStore {
         current
     }
 
+    /** Wake it up (shaking a sleeping pet). Doesn't count as playing. */
+    fun wake(context: Context, now: Long = System.currentTimeMillis()): PetState {
+        val updated = synchronized(lock) {
+            val next = load(context, now).advanceTo(now).wake(now)
+            save(context, next)
+            next
+        }
+        PetWidgetProvider.refreshAll(context)
+        return updated
+    }
+
+    /** A shake: wakes it if it's asleep, otherwise a quick play. */
+    fun shake(context: Context, now: Long = System.currentTimeMillis()): PetState {
+        val current = get(context, now)
+        return if (current.isAsleep(now)) wake(context, now) else act(context, Action.PLAY, now)
+    }
+
+    /** Steps counted by the phone. Doesn't refresh the widget (steps can arrive every second). */
+    fun walked(context: Context, steps: Int, live: Boolean, now: Long = System.currentTimeMillis()) {
+        synchronized(lock) {
+            save(context, load(context, now).advanceTo(now).walked(steps, now, live))
+        }
+    }
+
     /** End a nap caused by darkness (e.g. the phone was flipped over to say hello). */
     fun wakeFromDarkNap(context: Context, now: Long = System.currentTimeMillis()) {
         synchronized(lock) {
             val current = load(context, now).advanceTo(now)
-            if (current.nap == Nap.DARK) save(context, current.withNap(null, now))
+            if (current.nap == Nap.DARK) save(context, current.wake(now))
         }
     }
 
@@ -100,6 +130,10 @@ object PetStore {
             adultForm = formNamed(p.getString("adultForm", null)),
             nap = p.getString("nap", null)?.let { name -> Nap.entries.firstOrNull { it.name == name } },
             napSince = p.getLong("napSince", 0L),
+            wokenAt = p.getLong("wokenAt", 0L),
+            stepsToday = p.getInt("stepsToday", 0),
+            stepsDay = p.getLong("stepsDay", -1L),
+            walkingUntil = p.getLong("walkingUntil", 0L),
         )
     }
 
@@ -122,6 +156,10 @@ object PetStore {
             .putString("adultForm", s.adultForm?.name)
             .putString("nap", s.nap?.name)
             .putLong("napSince", s.napSince)
+            .putLong("wokenAt", s.wokenAt)
+            .putInt("stepsToday", s.stepsToday)
+            .putLong("stepsDay", s.stepsDay)
+            .putLong("walkingUntil", s.walkingUntil)
             .apply()
     }
 }

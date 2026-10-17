@@ -1,12 +1,20 @@
 package dev.terraformist.glyphpet
 
+import android.app.AlarmManager
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.hardware.TriggerEvent
+import android.hardware.TriggerEventListener
 import android.os.Handler
+import android.os.SystemClock
 import android.os.IBinder
 import android.os.Looper
 import android.os.Message
@@ -27,8 +35,12 @@ import com.nothing.ketchum.GlyphToy
  *  - Then just wait: after a moment the picked action happens.
  *
  * Motion (while the pet is awake on the matrix):
- *  - Shake the phone: a quick play, and the pet dashes about.
- *  - Turn the phone face-down: the pet peeks up from below and waves (also when the toy is picked).
+ *  - Shake the phone: wakes it if it's asleep, otherwise a quick play.
+ *  - Turn the phone face-down: the pet waves hello (also when the toy is picked).
+ *
+ * Waking from a dark-room nap without the app: we watch for the screen turning on, the
+ * charger, the phone being moved, and the light sensor (continuously if the phone has a
+ * "wake-up" light sensor, otherwise a quick look every couple of minutes while it naps).
  *
  * Animation:
  *  - Screen on, or within a minute of touching the Glyph Button: animates continuously.
@@ -55,12 +67,39 @@ class GlyphPetToyService : Service() {
     /** True when the last thing that woke us was the once-a-minute always-on tick. */
     private var alwaysOn = false
 
-    /** When the current "peek up and wave" greeting started (0 = none). */
+    /** When the current hello wave started (0 = none). */
     private var helloAt = 0L
 
     private val sensors by lazy {
         PetSensors(applicationContext, onShake = { onShake() }, onFlippedFaceDown = { sayHello() })
     }
+
+    private val sensorManager by lazy { getSystemService(Context.SENSOR_SERVICE) as SensorManager }
+    private val alarms by lazy { getSystemService(Context.ALARM_SERVICE) as AlarmManager }
+
+    // A light sensor that can wake the phone when the light changes (not every phone has one).
+    private val wakeUpLight: Sensor? by lazy { sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT, true) }
+    private val lightWatcher = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            Senses.noteLux(event.values[0])
+            if (event.values[0] > Senses.BRIGHT_LUX && !Senses.faceDown) checkForWaking()
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
+    // "The phone was picked up or carried": a low-power one-shot sensor.
+    private val motionTrigger = object : TriggerEventListener() {
+        override fun onTrigger(event: TriggerEvent?) {
+            motionArmed = false
+            animateFor(ACTIVE_MS, alwaysOnTick = false)
+        }
+    }
+    private var motionArmed = false
+
+    // While napping in the dark with no wake-up light sensor: peek at the light every few minutes.
+    private val lightCheckAlarm = AlarmManager.OnAlarmListener { lightCheck() }
+    private var lightCheckScheduled = false
 
     private val main = Handler(Looper.getMainLooper())
 
@@ -84,6 +123,7 @@ class GlyphPetToyService : Service() {
                 // Rest: one still frame, then let the phone sleep until something wakes us.
                 draw(now, animate = false, dim = alwaysOn)
                 sensors.stop()
+                armWakeTriggers()
                 releaseWakeLock()
             }
         }
@@ -105,11 +145,18 @@ class GlyphPetToyService : Service() {
 
     private val messenger = Messenger(buttonEvents)
 
-    private val screenOnReceiver = object : BroadcastReceiver() {
+    private val systemEvents = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == Intent.ACTION_SCREEN_ON) {
-                alwaysOn = false
-                restartLoop()
+            when (intent.action) {
+                Intent.ACTION_SCREEN_ON -> {
+                    alwaysOn = false
+                    animateFor(ACTIVE_MS, alwaysOnTick = false)
+                }
+                Intent.ACTION_POWER_CONNECTED, Intent.ACTION_POWER_DISCONNECTED -> {
+                    // Start or end a charging nap straight away.
+                    PetStore.get(applicationContext, checkNapNow = true)
+                    animateFor(CHARGER_SHOW_MS, alwaysOnTick = false)
+                }
             }
         }
     }
@@ -122,6 +169,7 @@ class GlyphPetToyService : Service() {
             override fun onServiceConnected(name: ComponentName?) {
                 manager.register(Glyph.DEVICE_23112)
                 connected = true
+                Weather.refreshIfStale(applicationContext)
                 sayHello()
             }
 
@@ -132,18 +180,26 @@ class GlyphPetToyService : Service() {
             }
         })
         if (!receiverRegistered) {
-            registerReceiver(screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON), Context.RECEIVER_NOT_EXPORTED)
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_POWER_CONNECTED)
+                addAction(Intent.ACTION_POWER_DISCONNECTED)
+            }
+            registerReceiver(systemEvents, filter, Context.RECEIVER_NOT_EXPORTED)
             receiverRegistered = true
         }
+        wakeUpLight?.let { sensorManager.registerListener(lightWatcher, it, SensorManager.SENSOR_DELAY_NORMAL) }
         return messenger.binder
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         main.removeCallbacks(tick)
         sensors.stop()
+        disarmWakeTriggers()
+        sensorManager.unregisterListener(lightWatcher)
         releaseWakeLock()
         if (receiverRegistered) {
-            unregisterReceiver(screenOnReceiver)
+            unregisterReceiver(systemEvents)
             receiverRegistered = false
         }
         connected = false
@@ -168,12 +224,78 @@ class GlyphPetToyService : Service() {
         animateFor(ACTIVE_MS, alwaysOnTick = false)
     }
 
+    /** Shaking wakes a sleeping pet (with its wake-up animation), otherwise it's a quick play. */
     private fun onShake() {
-        PetStore.act(applicationContext, Action.PLAY)
+        PetStore.shake(applicationContext)
         animateFor(ACTIVE_MS, alwaysOnTick = false)
     }
 
-    /** The pet peeks up from below the ground and waves. Also wakes it from a dark-room nap. */
+    /** If it was napping in the dark and the light is now on, wake it and show it. */
+    private fun checkForWaking() {
+        val before = PetStore.get(applicationContext)
+        if (before.nap != Nap.DARK) return
+        val after = PetStore.get(applicationContext, checkNapNow = true)
+        if (after.nap != Nap.DARK) animateFor(ACTIVE_MS, alwaysOnTick = false)
+    }
+
+    /** A quick look at the light while napping (no wake-up light sensor on this phone). */
+    private fun lightCheck() {
+        lightCheckScheduled = false
+        if (!connected) return
+        if (System.currentTimeMillis() < animateUntil) return // already awake and sensing
+        try {
+            wakeLock.acquire(LIGHT_LOOK_MS + 1_000L)
+        } catch (e: Exception) {
+            Log.w(TAG, "wake lock failed", e)
+        }
+        sensors.start()
+        main.postDelayed({
+            if (System.currentTimeMillis() >= animateUntil) {
+                checkForWaking()
+                if (System.currentTimeMillis() >= animateUntil) {
+                    sensors.stop()
+                    armWakeTriggers()
+                    releaseWakeLock()
+                }
+            }
+        }, LIGHT_LOOK_MS)
+    }
+
+    /** While resting: let movement, and (if napping in the dark) the light, bring us back. */
+    private fun armWakeTriggers() {
+        if (!connected) return
+        if (!motionArmed) {
+            sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION)?.let {
+                motionArmed = sensorManager.requestTriggerSensor(motionTrigger, it)
+            }
+        }
+        val napping = PetStore.get(applicationContext).nap == Nap.DARK
+        if (napping && wakeUpLight == null && !lightCheckScheduled) {
+            alarms.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + LIGHT_CHECK_EVERY_MS,
+                "GlyphPet:light",
+                lightCheckAlarm,
+                main,
+            )
+            lightCheckScheduled = true
+        }
+    }
+
+    private fun disarmWakeTriggers() {
+        if (motionArmed) {
+            sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION)?.let {
+                sensorManager.cancelTriggerSensor(motionTrigger, it)
+            }
+            motionArmed = false
+        }
+        if (lightCheckScheduled) {
+            alarms.cancel(lightCheckAlarm)
+            lightCheckScheduled = false
+        }
+    }
+
+    /** The pet waves hello. Also wakes it from a dark-room nap. */
     private fun sayHello() {
         helloAt = System.currentTimeMillis()
         PetStore.wakeFromDarkNap(applicationContext)
@@ -229,7 +351,11 @@ class GlyphPetToyService : Service() {
         val progress = if (selected != null) (now - selectedAt).toFloat() / CONFIRM_AFTER_MS else 0f
         val sinceHello = now - helloAt
         val hello = if (helloAt > 0L && sinceHello < HELLO_MS) sinceHello.toFloat() / HELLO_MS else -1f
-        val grid = PetScene.render(state, now, animate, selected, progress, hello = hello)
+        val grid = PetScene.render(
+            state, now, animate, selected, progress,
+            hello = hello,
+            weather = Weather.current(applicationContext, now),
+        )
         val frame = IntArray(grid.levels.size) { i ->
             val level = if (dim) grid.levels[i] * 6 / 10 else grid.levels[i]
             // The matrix takes 0..4095 per LED; our grid is 0..255.
@@ -248,6 +374,9 @@ class GlyphPetToyService : Service() {
         const val CONFIRM_AFTER_MS = 2_400L
         const val ACTIVE_MS = 60_000L
         const val AOD_BURST_MS = 4_000L
-        const val HELLO_MS = 3_000L
+        const val HELLO_MS = 2_500L
+        const val CHARGER_SHOW_MS = 6_000L
+        const val LIGHT_CHECK_EVERY_MS = 2 * 60_000L
+        const val LIGHT_LOOK_MS = 1_500L
     }
 }

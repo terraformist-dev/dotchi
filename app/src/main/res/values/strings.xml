@@ -8,4 +8,8 @@
     <string name="reset_message">Your current pet will be replaced by a new egg.</string>
     <string name="reset_confirm">New egg</string>
     <string name="guide_button">GUIDE</string>
+    <string name="permissions_title">Walks and weather</string>
+    <string name="permissions_message">Your pet can come on walks with you, using your phone\'s step counter, and react to the weather where you are, using your approximate location. Nothing leaves your phone except a rough location sent to a free weather service. You can change this later in your phone\'s settings.</string>
+    <string name="permissions_ok">Allow</string>
+    <string name="permissions_no">Not now</string>
 </resources>

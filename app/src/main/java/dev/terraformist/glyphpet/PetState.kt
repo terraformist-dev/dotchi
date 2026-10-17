@@ -8,7 +8,7 @@ enum class Stage { EGG, BABY, CHILD, ADULT }
 /** MEDICINE is only offered while the pet is ill (it takes Play's place). */
 enum class Action { FEED, PLAY, CLEAN, MEDICINE }
 
-enum class Mood { EGG, SICK, SLEEPING, HAPPY, OK, SAD, EATING, PLAYING, CLEANING, MEDICATED }
+enum class Mood { EGG, SICK, SLEEPING, WAKING, WALKING, HAPPY, OK, SAD, EATING, PLAYING, CLEANING, MEDICATED }
 
 /** Why the pet is napping outside its normal 11pm-7am sleep. */
 enum class Nap { DARK, CHARGING }
@@ -48,6 +48,10 @@ data class PetState(
     val adultForm: Form? = null,
     val nap: Nap? = null,        // napping right now, and why (set from the phone's sensors)
     val napSince: Long = 0L,
+    val wokenAt: Long = 0L,      // last time it was woken up (by a shake, or the lights coming on)
+    val stepsToday: Int = 0,     // steps walked with the phone today
+    val stepsDay: Long = -1L,    // which day [stepsToday] belongs to (days since 1970, local time)
+    val walkingUntil: Long = 0L, // shows the walking animation until then
 ) {
 
     fun stage(now: Long): Stage {
@@ -85,16 +89,62 @@ data class PetState(
                 else -> Mood.CLEANING
             }
         }
+        if (isWaking(now)) return Mood.WAKING
         if (sick) return Mood.SICK
+        if (isWalking(now)) return Mood.WALKING
         if (isAsleep(now)) return Mood.SLEEPING
         if (food < LOW || joy < LOW || poops >= 2) return Mood.SAD
         if (food >= HIGH && joy >= HIGH && poops == 0) return Mood.HAPPY
         return Mood.OK
     }
 
-    /** Asleep for the night or napping, and not just woken up by being looked after. */
+    /** Asleep for the night or napping, and not just woken up or out for a walk. */
     fun isAsleep(now: Long): Boolean =
-        (isNight(now) || nap != null) && now - lastActionAt > AWAKE_AFTER_ACTION_MS
+        (isNight(now) || nap != null) && now - lastActionAt > AWAKE_AFTER_ACTION_MS &&
+            !recentlyWoken(now) && !isWalking(now)
+
+    /** Woken up in the last [WOKEN_AWAKE_MS]: stays awake, and won't start a new nap. */
+    fun recentlyWoken(now: Long): Boolean = wokenAt > 0L && now - wokenAt in 0L until WOKEN_AWAKE_MS
+
+    /** Playing the wake-up animation. */
+    fun isWaking(now: Long): Boolean = wokenAt > 0L && now - wokenAt in 0L until WAKING_ANIM_MS
+
+    fun isWalking(now: Long): Boolean = now < walkingUntil
+
+    /** Wake it up (shake, or lights on). Doesn't count as playing. Call [advanceTo] first. */
+    fun wake(now: Long): PetState = copy(nap = null, napSince = now, wokenAt = now)
+
+    /** Today's steps, or 0 if none have been counted yet today. */
+    fun stepsOn(now: Long, zone: ZoneId = ZoneId.systemDefault()): Int =
+        if (stepsDay == epochDay(now, zone)) stepsToday else 0
+
+    /**
+     * The phone counted [steps] more steps. Every 1,000 cheers it up a little and makes it a
+     * little hungry; reaching [STEP_GOAL] in a day is a treat. [live] means they were taken
+     * just now (so show it walking), not added up while nothing was watching.
+     */
+    fun walked(steps: Int, now: Long, live: Boolean, zone: ZoneId = ZoneId.systemDefault()): PetState {
+        if (steps <= 0) return this
+        val today = epochDay(now, zone)
+        val before = if (stepsDay == today) stepsToday else 0
+        val after = before + steps
+        if (stage(now) == Stage.EGG) return copy(stepsToday = after, stepsDay = today)
+        val thousands = after / 1000 - before / 1000
+        var joy = joy + JOY_PER_1000_STEPS * thousands
+        val food = food - FOOD_PER_1000_STEPS * thousands
+        val goal = before < STEP_GOAL && after >= STEP_GOAL
+        if (goal) joy += STEP_GOAL_JOY
+        return copy(
+            stepsToday = after,
+            stepsDay = today,
+            joy = joy.coerceIn(0f, 100f),
+            food = food.coerceIn(0f, 100f),
+            walkingUntil = if (live) now + WALKING_SHOW_MS else walkingUntil,
+            // A little celebration (hearts) for reaching the daily goal.
+            lastAction = if (goal) Action.PLAY else lastAction,
+            lastActionAt = if (goal) now else lastActionAt,
+        )
+    }
 
     /** Start or stop a nap. Call [advanceTo] first so the time before now is counted correctly. */
     fun withNap(reason: Nap?, now: Long): PetState =
@@ -155,10 +205,12 @@ data class PetState(
                 // [nap] can only have changed at [napSince], which is never later than [lastTick].
                 val napping = nap != null && mid >= napSince
                 val night = isNight(mid, zone)
-                val asleep = night || napping
-                val pace = if (night) SLEEP_PACE else if (napping) NAP_PACE else 1f
+                // Shaken awake: stays up for a while, even at night.
+                val woken = wokenAt > 0L && mid >= wokenAt && mid < wokenAt + WOKEN_AWAKE_MS
+                val asleep = (night || napping) && !woken
+                val pace = if (!asleep) 1f else if (night) SLEEP_PACE else NAP_PACE
                 // Napping on the charger slowly cheers it up.
-                if (napping && nap == Nap.CHARGING) joy += CHARGING_JOY_PER_HOUR * hours
+                if (asleep && napping && nap == Nap.CHARGING) joy += CHARGING_JOY_PER_HOUR * hours
                 food -= FOOD_PER_HOUR * hours * pace
                 val gloom = POOP_GLOOM_PER_HOUR * poops + if (sick) SICK_GLOOM_PER_HOUR else 0f
                 joy -= (JOY_PER_HOUR + gloom) * hours * pace
@@ -282,6 +334,14 @@ data class PetState(
         const val SICK_GLOOM_PER_HOUR = 4f
         const val SLEEP_PACE = 0.3f
         const val NAP_PACE = 0.5f
+        const val WOKEN_AWAKE_MS = 15 * MINUTE_MS
+        const val WAKING_ANIM_MS = 2_600L
+
+        const val JOY_PER_1000_STEPS = 6f
+        const val FOOD_PER_1000_STEPS = 3f
+        const val STEP_GOAL = 5_000
+        const val STEP_GOAL_JOY = 15f
+        const val WALKING_SHOW_MS = 15_000L
         const val CHARGING_JOY_PER_HOUR = 6f
         const val POOP_EVERY_MS = 4 * HOUR_MS
         const val MAX_POOPS = 3
@@ -312,6 +372,9 @@ data class PetState(
             lastAction = null,
             lastActionAt = 0L,
         )
+
+        fun epochDay(time: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
+            Instant.ofEpochMilli(time).atZone(zone).toLocalDate().toEpochDay()
 
         fun isNight(time: Long, zone: ZoneId = ZoneId.systemDefault()): Boolean {
             val hour = Instant.ofEpochMilli(time).atZone(zone).hour

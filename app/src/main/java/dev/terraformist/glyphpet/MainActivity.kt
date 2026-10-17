@@ -1,7 +1,9 @@
 package dev.terraformist.glyphpet
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -18,10 +20,11 @@ class MainActivity : Activity() {
     private lateinit var statusView: TextView
     private lateinit var buttons: List<ImageView>
 
-    // Shake the phone for a quick play; the light sensor also lets it nap in the dark.
+    // Shake the phone: wakes it if it's asleep, otherwise a quick play.
+    // The light sensor and step counter are read here too.
     private val sensors by lazy {
         PetSensors(this, onShake = {
-            PetStore.act(this, Action.PLAY)
+            PetStore.shake(this)
             render()
         })
     }
@@ -61,6 +64,38 @@ class MainActivity : Activity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
         }
+
+        askForPermissionsOnce()
+    }
+
+    /** Walks need the step counter; weather needs approximate location. Asked once, with a reason. */
+    private fun askForPermissionsOnce() {
+        val prefs = getSharedPreferences("app", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("askedWalksWeather", false)) return
+        if (Senses.canCountSteps(this) && Weather.canUse(this)) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.permissions_title)
+            .setMessage(R.string.permissions_message)
+            .setPositiveButton(R.string.permissions_ok) { _, _ ->
+                prefs.edit().putBoolean("askedWalksWeather", true).apply()
+                requestPermissions(
+                    arrayOf(Manifest.permission.ACTIVITY_RECOGNITION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                    PERMISSIONS_REQUEST,
+                )
+            }
+            .setNegativeButton(R.string.permissions_no) { _, _ ->
+                prefs.edit().putBoolean("askedWalksWeather", true).apply()
+            }
+            .show()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != PERMISSIONS_REQUEST) return
+        // Start counting steps and fetch the weather now that we're allowed to.
+        sensors.stop()
+        sensors.start()
+        Weather.refreshIfStale(this) { render() }
     }
 
     private fun onSlot(slot: Int) {
@@ -77,6 +112,7 @@ class MainActivity : Activity() {
         super.onResume()
         handler.post(loop)
         sensors.start()
+        Weather.refreshIfStale(this) { render() }
         PetWidgetProvider.refreshAll(this)
     }
 
@@ -89,7 +125,10 @@ class MainActivity : Activity() {
     private fun render() {
         val now = System.currentTimeMillis()
         val state = PetStore.get(this, now)
-        petView.setImageBitmap(DotPainter.paintPet(PetScene.render(state, now, animate = true), pitch = 24))
+        val weather = Weather.current(this, now)
+        petView.setImageBitmap(
+            DotPainter.paintPet(PetScene.render(state, now, animate = true, weather = weather), pitch = 24)
+        )
 
         state.actions().forEachIndexed { slot, action ->
             val view = buttons[slot]
@@ -97,7 +136,15 @@ class MainActivity : Activity() {
             view.contentDescription = PetWidgetProvider.label(action)
         }
 
-        statusView.text = statusLine(state, now)
+        statusView.text = statusLine(state, now) + extrasLine(state, now, weather)
+    }
+
+    /** A second line with today's steps and the weather, when we have them. */
+    private fun extrasLine(state: PetState, now: Long, weather: WeatherNow?): String {
+        val parts = mutableListOf<String>()
+        if (Senses.canCountSteps(this)) parts += "%,d STEPS".format(state.stepsOn(now))
+        if (weather != null) parts += "${weather.label} ${weather.tempC}°C"
+        return if (parts.isEmpty()) "" else "\n" + parts.joinToString("  ·  ")
     }
 
     private fun statusLine(state: PetState, now: Long): String {
@@ -119,12 +166,16 @@ class MainActivity : Activity() {
             Mood.PLAYING -> "PLAYING"
             Mood.CLEANING -> "FRESH"
             Mood.MEDICATED -> "YUCK!"
+            Mood.WAKING -> "WAKING UP"
+            Mood.WALKING -> "WALKING"
             else -> "CONTENT"
         }
         return "${state.name(now)}  ·  DAY ${state.day(now)}  ·  $mood"
     }
 
     companion object {
+        private const val PERMISSIONS_REQUEST = 1
+
         /** A heading written in the dot font. */
         fun dotTitle(text: String) = DotGrid(DotFont.width(text), DotFont.HEIGHT).let { g ->
             g.text(text, 0, 0)

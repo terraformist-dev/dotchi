@@ -18,8 +18,10 @@ class PetWidgetProvider : AppWidgetProvider() {
         // Every half hour: take a quick look at the light and charger first, so naps start and end.
         val pending = goAsync()
         Senses.sample(context) {
-            draw(context, manager, ids)
-            pending.finish()
+            Weather.refreshIfStale(context) {
+                draw(context, manager, ids)
+                pending.finish()
+            }
         }
     }
 
@@ -63,8 +65,9 @@ class PetWidgetProvider : AppWidgetProvider() {
             val now = System.currentTimeMillis()
             val state = PetStore.get(context, now)
             // Pre-draw a short loop; the home screen flips through it every 500ms.
+            val weather = Weather.current(context, now)
             val frames = FRAME_TIMES.map { t ->
-                DotPainter.paintPet(PetScene.render(state, now, animate = true, anim = t), pitch = 12)
+                DotPainter.paintPet(PetScene.render(state, now, animate = true, anim = t, weather = weather), pitch = 12)
             }
             for (id in ids) {
                 val views = RemoteViews(context.packageName, R.layout.widget_pet)

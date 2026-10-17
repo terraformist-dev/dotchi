@@ -38,3 +38,12 @@ Nothing look: black, white dots, one red accent (`#D71921`), faint unlit "ghost"
 Owner wants screens calm and uncluttered: show things only when they're relevant
 (e.g. MEDS replaces PLAY only while ill). Mini-games are app-only for now; Glyph Play is a quick play.
 Every body sprite keeps a lit row between the bottom of the eyes and the top of the mouth.
+
+## Sensors, permissions, network
+
+Walks use `TYPE_STEP_COUNTER` (ACTIVITY_RECOGNITION); weather uses coarse location + Open-Meteo
+(no key). Both are asked for once on first app open; everything must still work if refused.
+The light sensor faces the screen side, so light is ignored while the phone is face-down.
+The Glyph Toy can't run in the background between frames: anything time-based must be lazily
+computed in `PetState.advanceTo`, and waking the matrix relies on screen-on, charger broadcasts,
+significant-motion, a wake-up light sensor if present, or a short light check every 2 minutes.

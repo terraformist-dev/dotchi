@@ -186,6 +186,32 @@ private object Art {
         ".#.",
         "#..",
     )
+    val SUN = Sprite(
+        "#.#.#",
+        ".###.",
+        "#####",
+        ".###.",
+        "#.#.#",
+    )
+    val MOON = Sprite(
+        ".###",
+        "##..",
+        "#...",
+        "##..",
+        ".###",
+    )
+    val CLOUD = Sprite(
+        "..##..",
+        ".####.",
+        "######",
+    )
+    val FOG = Sprite(
+        "#####",
+        ".....",
+        ".####",
+        ".....",
+        "####.",
+    )
     val HAND = Sprite(
         "##",
         "##",
@@ -224,8 +250,6 @@ object PetScene {
     private const val FEET_Y = 19
     private const val CENTER_X = 12
 
-    /** The first part of the greeting is rising up; the rest is waving. */
-    private const val PEEK_PART = 0.35f
 
     /**
      * @param animate false for a still picture.
@@ -237,7 +261,8 @@ object PetScene {
      * @param moodOverride show this mood instead of the real one (mini-game reactions).
      * @param topText text shown above the pet instead of the usual icons (mini-games).
      * @param hud false hides the icons above the pet.
-     * @param hello 0..1 progress of the "peek up and wave" greeting, or negative for none.
+     * @param hello 0..1 progress of the hello wave, or negative for none.
+     * @param weather local weather to show (falling rain/snow, a little sky icon), if known.
      */
     fun render(
         state: PetState,
@@ -251,6 +276,7 @@ object PetScene {
         topText: String? = null,
         hud: Boolean = true,
         hello: Float = -1f,
+        weather: WeatherNow? = null,
     ): DotGrid {
         val g = DotGrid(SIZE, SIZE)
         val greeting = hello >= 0f && hello <= 1f
@@ -261,24 +287,30 @@ object PetScene {
         }
         val stage = state.stage(now)
 
+        // Weather goes in first, so the pet stands in front of the rain.
+        if (weather != null) drawWeather(g, weather, anim, animate)
+
         if (stage == Stage.EGG) {
             drawEgg(g, state, now, anim, animate)
         } else {
             drawPoops(g, state.poops, anim, animate)
-            drawPet(g, Art.body(stage, state.form(now)), mood, anim, animate, look, if (greeting) hello else -1f)
+            val waking = if (mood == Mood.WAKING) (now - state.wokenAt).toFloat() / PetState.WAKING_ANIM_MS else -1f
+            drawPet(g, Art.body(stage, state.form(now)), mood, anim, animate, look, greeting, waking)
         }
 
-        // The ground goes on last so a pet peeking up from below it is hidden underneath.
-        for (y in GROUND_Y until SIZE) for (x in 0 until SIZE) g.set(x, y, 0)
-        drawGround(g)
+        // Walking: the ground slides past underneath.
+        val scroll = if (animate && mood == Mood.WALKING) ((anim / 200) % 2).toInt() else 0
+        drawGround(g, scroll)
 
         when {
-            greeting && hello > PEEK_PART -> g.text("HI", (SIZE - DotFont.width("HI")) / 2, 1)
             topText != null -> {
                 val x = (SIZE - DotFont.width(topText)) / 2
                 g.text(topText, x, 1)
             }
-            hud -> drawTop(g, state, mood, anim, animate, selected, selectProgress)
+            hud -> {
+                drawTop(g, state, mood, anim, animate, selected, selectProgress)
+                if (weather != null && selected == null) drawSkyIcon(g, weather)
+            }
         }
 
         // Anything outside the real matrix shape stays dark.
@@ -288,8 +320,44 @@ object PetScene {
         return g
     }
 
-    private fun drawGround(g: DotGrid) {
-        for (x in 3..21 step 2) g.set(x, GROUND_Y, 40)
+    private fun drawGround(g: DotGrid, scroll: Int = 0) {
+        for (x in 0 until SIZE) g.set(x, GROUND_Y, 0)
+        for (x in (3 + scroll)..21 step 2) g.set(x, GROUND_Y, 40)
+    }
+
+    /** Falling rain or snow, faint, behind everything. */
+    private fun drawWeather(g: DotGrid, w: WeatherNow, anim: Long, animate: Boolean) {
+        val t = if (animate) anim else 0L
+        when (w.sky) {
+            Sky.RAIN, Sky.STORM -> {
+                val columns = if (w.sky == Sky.STORM) intArrayOf(3, 5, 7, 9, 11, 13, 15, 17, 19, 21)
+                else intArrayOf(4, 8, 12, 16, 20)
+                columns.forEachIndexed { i, x ->
+                    val y = ((t / 90 + i * 7) % 19).toInt()
+                    g.set(x, y, 60)
+                    g.set(x, y - 1, 25)
+                }
+            }
+            Sky.SNOW -> {
+                val columns = intArrayOf(4, 9, 14, 19, 6, 17)
+                columns.forEachIndexed { i, x ->
+                    val y = ((t / 350 + i * 5) % 19).toInt()
+                    val drift = ((t / 700 + i) % 2).toInt()
+                    g.set(x + drift, y, 90)
+                }
+            }
+            else -> {}
+        }
+    }
+
+    /** A small, faint sky icon in the top-left: sun, moon, cloud or fog. */
+    private fun drawSkyIcon(g: DotGrid, w: WeatherNow) {
+        val icon = when (w.sky) {
+            Sky.CLEAR -> if (w.isDay) Art.SUN else Art.MOON
+            Sky.FOG -> Art.FOG
+            else -> Art.CLOUD
+        }
+        g.stamp(icon, 4, 4, level = 90)
     }
 
     private fun drawEgg(g: DotGrid, state: PetState, now: Long, anim: Long, animate: Boolean) {
@@ -328,28 +396,33 @@ object PetScene {
         anim: Long,
         animate: Boolean,
         look: Int,
-        hello: Float,
+        waving: Boolean,
+        waking: Float,
     ) {
         val sprite = body.sprite
+        // Waking up: first a sleepy wriggle, then a jump with wide eyes.
+        val wakingWriggle = waking in 0f..0.3f
+        val wakingJump = waking > 0.3f
 
         val lift = if (!animate) 0 else when (mood) {
             Mood.PLAYING -> if ((anim / 180) % 2 == 0L) 2 else 0
             Mood.HAPPY, Mood.OK, Mood.CLEANING -> ((anim / 500) % 2).toInt()
             Mood.EATING -> ((anim / 250) % 2).toInt()
             Mood.SAD -> if ((anim / 1400) % 2 == 0L) 0 else 1
+            Mood.WALKING -> ((anim / 250) % 2).toInt()
+            Mood.WAKING -> if (wakingJump) intArrayOf(3, 2, 1, 0, 0, 0)[(((waking - 0.3f) / 0.7f) * 6).toInt().coerceIn(0, 5)] else 0
             else -> 0
         }
         // An ill pet shivers from side to side instead of bouncing.
         val shiver = if (animate && mood == Mood.SICK) (if ((anim / 300) % 2 == 0L) 0 else 1) else 0
         // Playing: dash from side to side as well as hopping.
         val dash = if (animate && mood == Mood.PLAYING) intArrayOf(0, 2, 3, 2, 0, -2, -3, -2)[((anim / 150) % 8).toInt()] else 0
-        // Greeting: start hidden below the ground and rise up.
-        val sink = if (hello in 0f..PEEK_PART) ((1f - hello / PEEK_PART) * (sprite.height + 1)).toInt() else 0
-        val left = CENTER_X - sprite.width / 2 + shiver + dash
-        val top = FEET_Y - sprite.height + 1 - lift + sink
-        val level = when (mood) {
-            Mood.SLEEPING -> 150
-            Mood.SICK -> 120
+        val wriggle = if (animate && wakingWriggle) (if ((anim / 90) % 2 == 0L) -1 else 1) else 0
+        val left = CENTER_X - sprite.width / 2 + shiver + dash + wriggle
+        val top = FEET_Y - sprite.height + 1 - lift
+        val level = when {
+            mood == Mood.SLEEPING || wakingWriggle -> 150
+            mood == Mood.SICK -> 120
             else -> 255
         }
         g.stamp(sprite, left, top, level)
@@ -358,7 +431,7 @@ object PetScene {
         val ey = top + body.eyeY
         val blink = animate && (anim % 3400) < 160
         val eyesClosed = mood == Mood.SLEEPING || mood == Mood.PLAYING || mood == Mood.SICK ||
-            mood == Mood.MEDICATED || blink
+            mood == Mood.MEDICATED || wakingWriggle || (blink && mood != Mood.WAKING)
         for (ex in listOf(left + body.eyeLeftX + look, left + body.eyeRightX + look)) {
             for (dx in 0 until body.eyeWidth) {
                 if (eyesClosed) {
@@ -370,8 +443,8 @@ object PetScene {
             }
         }
 
-        // Greeting: a little hand waving beside it.
-        if (hello > PEEK_PART) {
+        // Hello: a little hand waving beside it.
+        if (waving) {
             val up = (anim / 220) % 2 == 0L
             g.stamp(Art.HAND, left + sprite.width + 1, top + if (up) 1 else 3)
         }
@@ -380,7 +453,8 @@ object PetScene {
         val mx = left + body.mouthX + look
         val my = top + body.mouthY
         when (mood) {
-            Mood.HAPPY, Mood.PLAYING, Mood.CLEANING -> smile(g, mx, my)
+            Mood.HAPPY, Mood.PLAYING, Mood.CLEANING, Mood.WALKING -> smile(g, mx, my)
+            Mood.WAKING -> if (wakingWriggle) flat(g, mx, my) else openMouth(g, mx, my)
             Mood.SAD, Mood.SICK -> frown(g, mx, my)
             Mood.EATING -> if (!animate || (anim / 250) % 2 == 0L) openMouth(g, mx, my) else flat(g, mx, my)
             Mood.SLEEPING -> g.carve(mx, my + 1)
@@ -431,6 +505,7 @@ object PetScene {
             Mood.PLAYING -> g.stamp(Art.HEART, iconX, iconY + 1, red = true)
             Mood.EATING -> g.stamp(Art.FOOD, iconX, iconY, level = 120)
             Mood.MEDICATED -> g.stamp(Art.PILL, iconX, iconY, level = 120)
+            Mood.WAKING -> g.text("!", 11, iconY)
             Mood.CLEANING -> {
                 val flip = animate && (anim / 300) % 2 == 0L
                 if (flip) { g.stamp(Art.SPARK, 4, 6); g.stamp(Art.SPARK, 18, 9) }
