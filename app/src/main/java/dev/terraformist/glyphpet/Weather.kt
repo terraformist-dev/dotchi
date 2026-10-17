@@ -39,7 +39,9 @@ object Weather {
     private const val TAG = "GlyphPet"
     private const val PREFS = "weather"
     private const val REFRESH_MS = 45 * 60_000L
-    private const val SHOW_FOR_MS = 3 * 60 * 60_000L
+    // Android only lets us look up location while the app is open (unless given "all the time"
+    // access), so the widget and Glyph Toy mostly show what was fetched last time the app was open.
+    private const val SHOW_FOR_MS = 6 * 60 * 60_000L
 
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var fetching = false

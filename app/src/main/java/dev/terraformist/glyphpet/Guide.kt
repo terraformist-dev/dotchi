@@ -82,9 +82,10 @@ object Guide {
             "Your pet sees the weather where you are. A faint sun, moon, cloud or fog shows in the " +
                 "top corner, and rain or snow falls gently behind it. The weather and temperature are " +
                 "shown under its name on the pet screen.\n\nWeather uses your approximate location (to " +
-                "about a kilometre), sent to a free weather service, and updates about every 45 minutes. " +
-                "If you said no to location, you can turn it on for Glyph Pet in your phone's Settings, " +
-                "under Apps.",
+                "about a kilometre), sent to a free weather service. It updates when you open the app " +
+                "(at most every 45 minutes), and the widget and Glyph Matrix keep showing it for up to 6 " +
+                "hours. If you said no to location, you can turn it on for Glyph Pet in your phone's " +
+                "Settings, under Apps.",
         ),
         Section(
             "GROWING UP",
