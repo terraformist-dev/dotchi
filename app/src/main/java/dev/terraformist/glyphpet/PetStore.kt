@@ -36,6 +36,17 @@ object PetStore {
         return updated
     }
 
+    /** Record the result of a mini-game. */
+    fun played(context: Context, won: Boolean, now: Long = System.currentTimeMillis()): PetState {
+        val updated = synchronized(lock) {
+            val next = load(context, now).advanceTo(now).played(won, now)
+            save(context, next)
+            next
+        }
+        PetWidgetProvider.refreshAll(context)
+        return updated
+    }
+
     /** Start over with a fresh egg. */
     fun reset(context: Context, now: Long = System.currentTimeMillis()): PetState {
         val egg = PetState.newEgg(now)
@@ -62,8 +73,15 @@ object PetStore {
                 Action.entries.firstOrNull { it.name == name }
             },
             lastActionAt = p.getLong("lastActionAt", 0L),
+            sick = p.getBoolean("sick", false),
+            sickRiskMs = p.getLong("sickRiskMs", 0L),
+            neglectMs = p.getLong("neglectMs", 0L),
+            childForm = formNamed(p.getString("childForm", null)),
+            adultForm = formNamed(p.getString("adultForm", null)),
         )
     }
+
+    private fun formNamed(name: String?): Form? = Form.entries.firstOrNull { it.name == name }
 
     private fun save(context: Context, s: PetState) {
         prefs(context).edit()
@@ -75,6 +93,11 @@ object PetStore {
             .putLong("nextPoopAt", s.nextPoopAt)
             .putString("lastAction", s.lastAction?.name)
             .putLong("lastActionAt", s.lastActionAt)
+            .putBoolean("sick", s.sick)
+            .putLong("sickRiskMs", s.sickRiskMs)
+            .putLong("neglectMs", s.neglectMs)
+            .putString("childForm", s.childForm?.name)
+            .putString("adultForm", s.adultForm?.name)
             .apply()
     }
 }

@@ -78,14 +78,18 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/guide"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/button_bg"
             android:fontFamily="monospace"
-            android:lineSpacingExtra="4dp"
-            android:text="@string/help"
-            android:textColor="#CFCFCF"
-            android:textSize="13sp" />
+            android:gravity="center"
+            android:letterSpacing="0.2"
+            android:text="@string/guide_button"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/reset"

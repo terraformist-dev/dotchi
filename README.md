@@ -19,21 +19,22 @@ New builds install over the old one, and the pet is kept.
 
 ## Using it
 
-- **Widget:** long-press the home screen → Widgets → Glyph Pet.
-- **Glyph Matrix:** Glyph settings → Glyph Toys → add Glyph Pet. Long-press the back button to pick Feed / Play / Clean, then wait two seconds.
+Everything is explained in the app: tap **GUIDE** on the pet screen.
 
 ## How it works
 
 | File | What it does |
 |---|---|
-| `PetState.kt` | The pet's stats and rules: hunger, happiness, mess, sleep, growing up. No Android code. |
+| `PetState.kt` | The pet's stats and rules: hunger, happiness, mess, illness, sleep, growing up into different forms. No Android code. |
 | `PetStore.kt` | Saves the pet; the one place the widget, toy and app all go through. |
 | `PetScene.kt` | Draws the 25×25 scene (pet, mess, icons). Shared by the widget and the Glyph Matrix. |
 | `DotGrid.kt` | The dot grid, the exact Glyph Matrix shape, and a 3×5 dot font. |
 | `DotPainter.kt` | Paints a dot grid as round dots for the widget and app (white, black, Nothing red). |
 | `PetWidgetProvider.kt` | The home-screen widget. |
 | `GlyphPetToyService.kt` | The Glyph Toy. |
-| `MainActivity.kt` | The app screen with instructions. |
+| `MainActivity.kt` | The main pet screen. |
+| `GameActivity.kt` | Mini-games: Left or Right, Higher or Lower. |
+| `Guide.kt` / `GuideActivity.kt` | The in-app Guide. Update it whenever how you care for the pet changes. |
 
 The pet never runs in the background. Whenever anything shows it, `PetState.advanceTo()` works out what happened since it was last looked at.
 

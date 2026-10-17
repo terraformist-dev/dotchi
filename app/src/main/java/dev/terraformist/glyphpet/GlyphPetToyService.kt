@@ -22,6 +22,8 @@ import com.nothing.ketchum.GlyphToy
  *
  * Controls (Glyph Button on the back):
  *  - Long-press: pick the next action (Feed -> Play -> Clean -> nothing).
+ *    While the pet is ill, Medicine takes Play's place. Play here is a quick play,
+ *    not a mini-game (those are in the app for now).
  *  - Then just wait: after a moment the picked action happens.
  *
  * Animation:
@@ -146,7 +148,8 @@ class GlyphPetToyService : Service() {
     }
 
     private fun onLongPress() {
-        val order = listOf(Action.FEED, Action.PLAY, Action.CLEAN, null)
+        // Feed -> Play (or Medicine when ill) -> Clean -> nothing.
+        val order: List<Action?> = PetStore.get(applicationContext).actions() + listOf(null)
         selected = order[(order.indexOf(selected) + 1) % order.size]
         selectedAt = System.currentTimeMillis()
         animateFor(ACTIVE_MS, alwaysOnTick = false)

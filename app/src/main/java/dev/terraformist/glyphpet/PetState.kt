@@ -5,16 +5,29 @@ import java.time.ZoneId
 
 enum class Stage { EGG, BABY, CHILD, ADULT }
 
-enum class Action { FEED, PLAY, CLEAN }
+/** MEDICINE is only offered while the pet is ill (it takes Play's place). */
+enum class Action { FEED, PLAY, CLEAN, MEDICINE }
 
-enum class Mood { EGG, SLEEPING, HAPPY, OK, SAD, EATING, PLAYING, CLEANING }
+enum class Mood { EGG, SICK, SLEEPING, HAPPY, OK, SAD, EATING, PLAYING, CLEANING, MEDICATED }
+
+/**
+ * What the pet grows into. Which one depends on how well it was looked after
+ * in the stage before ("neglect" = awake time spent with a need left unmet).
+ */
+enum class Form(val stage: Stage, val label: String) {
+    PIP(Stage.CHILD, "PIP"),       // child, well looked after
+    GRUB(Stage.CHILD, "GRUB"),     // child, often neglected
+    NOVA(Stage.ADULT, "NOVA"),     // adult, excellent care
+    BUD(Stage.ADULT, "BUD"),       // adult, decent care
+    GLOOP(Stage.ADULT, "GLOOP"),   // adult, poor care
+}
 
 /**
  * Everything the pet "is", as plain numbers. No Android code in here.
  *
  * The pet never runs in the background. Instead, whenever anything looks at it,
  * [advanceTo] replays the time that has passed since [lastTick] and works out
- * how hungry, bored and messy it has become.
+ * how hungry, bored, messy or ill it has become, and whether it has grown up.
  */
 data class PetState(
     val bornAt: Long,
@@ -25,6 +38,11 @@ data class PetState(
     val nextPoopAt: Long,
     val lastAction: Action?,
     val lastActionAt: Long,
+    val sick: Boolean = false,
+    val sickRiskMs: Long = 0L,   // builds up while it's dirty or starving; at SICK_AFTER_MS it falls ill
+    val neglectMs: Long = 0L,    // awake time with an unmet need, during the current stage
+    val childForm: Form? = null,
+    val adultForm: Form? = null,
 ) {
 
     fun stage(now: Long): Stage {
@@ -37,6 +55,16 @@ data class PetState(
         }
     }
 
+    /** The current form (null for egg and baby). */
+    fun form(now: Long): Form? = when (stage(now)) {
+        Stage.CHILD -> childForm ?: Form.PIP
+        Stage.ADULT -> adultForm ?: Form.NOVA
+        else -> null
+    }
+
+    /** Short name for status lines: BABY, PIP, NOVA... */
+    fun name(now: Long): String = form(now)?.label ?: stage(now).name
+
     /** Whole days since hatching, starting at 1. */
     fun day(now: Long): Int = ((now - bornAt) / DAY_MS).toInt() + 1
 
@@ -48,9 +76,11 @@ data class PetState(
             return when (lastAction) {
                 Action.FEED -> Mood.EATING
                 Action.PLAY -> Mood.PLAYING
+                Action.MEDICINE -> Mood.MEDICATED
                 else -> Mood.CLEANING
             }
         }
+        if (sick) return Mood.SICK
         if (isNight(now) && now - lastActionAt > AWAKE_AFTER_ACTION_MS) return Mood.SLEEPING
         if (food < LOW || joy < LOW || poops >= 2) return Mood.SAD
         if (food >= HIGH && joy >= HIGH && poops == 0) return Mood.HAPPY
@@ -59,6 +89,7 @@ data class PetState(
 
     /** The action the pet most needs right now, or null if it's fine. */
     fun mostNeeded(): Action? = when {
+        sick -> Action.MEDICINE
         poops >= 2 -> Action.CLEAN
         food < LOW && food <= joy -> Action.FEED
         joy < LOW -> Action.PLAY
@@ -67,7 +98,11 @@ data class PetState(
         else -> null
     }
 
-    /** 0..5 dots for each meter on the widget. */
+    /** The three actions on offer right now: Play turns into Medicine while it's ill. */
+    fun actions(): List<Action> =
+        listOf(Action.FEED, if (sick) Action.MEDICINE else Action.PLAY, Action.CLEAN)
+
+    /** 0..5 dots for each meter on the buttons. */
     fun level(action: Action): Int = when (action) {
         Action.FEED -> ((food + 10f) / 20f).toInt().coerceIn(0, 5)
         Action.PLAY -> ((joy + 10f) / 20f).toInt().coerceIn(0, 5)
@@ -77,6 +112,7 @@ data class PetState(
             2 -> 1
             else -> 0
         }
+        Action.MEDICINE -> 0
     }
 
     /** Replay the time between [lastTick] and [now] in small steps. */
@@ -87,34 +123,75 @@ data class PetState(
         var joy = joy
         var poops = poops
         var nextPoop = nextPoopAt
+        var sick = sick
+        var sickRisk = sickRiskMs
+        var neglect = neglectMs
+        var childForm = childForm
+        var adultForm = adultForm
 
         // Don't replay more than two weeks: after that everything is at zero anyway.
         if (now - t > MAX_REPLAY_MS) t = now - MAX_REPLAY_MS
 
         while (t < now) {
             val step = minOf(STEP_MS, now - t)
+            val end = t + step
             val mid = t + step / 2
             val hours = step / HOUR_MS.toFloat()
-            val stage = stage(mid)
-            if (stage != Stage.EGG) {
+
+            if (stage(mid) != Stage.EGG) {
                 val asleep = isNight(mid, zone)
                 val pace = if (asleep) SLEEP_PACE else 1f
                 food -= FOOD_PER_HOUR * hours * pace
-                joy -= (JOY_PER_HOUR + POOP_GLOOM_PER_HOUR * poops) * hours * pace
-                if (t + step >= nextPoop) {
+                val gloom = POOP_GLOOM_PER_HOUR * poops + if (sick) SICK_GLOOM_PER_HOUR else 0f
+                joy -= (JOY_PER_HOUR + gloom) * hours * pace
+
+                if (end >= nextPoop) {
                     if (asleep) {
                         // Hold it until morning.
-                        nextPoop = t + step + 30 * MINUTE_MS
+                        nextPoop = end + 30 * MINUTE_MS
                     } else {
                         if (poops < MAX_POOPS) poops++
-                        nextPoop = t + step + POOP_EVERY_MS
+                        nextPoop = end + POOP_EVERY_MS
                     }
                 }
+
+                if (!asleep) {
+                    // Falling ill: mess left lying around, or starving.
+                    val risky = poops >= 2 || food < STARVING
+                    sickRisk = if (risky) sickRisk + step else maxOf(0L, sickRisk - step)
+                    if (!sick && sickRisk >= SICK_AFTER_MS) {
+                        sick = true
+                        sickRisk = 0L
+                    }
+                    // Neglect: any need left unmet while it's awake.
+                    if (sick || poops >= 2 || food < LOW || joy < LOW) neglect += step
+                }
             } else {
-                nextPoop = maxOf(nextPoop, t + step + POOP_EVERY_MS)
+                nextPoop = maxOf(nextPoop, end + POOP_EVERY_MS)
             }
-            t += step
+
+            // Growing up: pick a form based on how it was cared for, then start counting afresh.
+            val before = stage(t)
+            val after = stage(end)
+            if (before == Stage.BABY && after != Stage.BABY && childForm == null) {
+                childForm = if (neglect <= CHILD_GOOD_MAX_NEGLECT_MS) Form.PIP else Form.GRUB
+                neglect = 0L
+            }
+            if (before == Stage.CHILD && after == Stage.ADULT && adultForm == null) {
+                adultForm = when {
+                    neglect <= ADULT_GREAT_MAX_NEGLECT_MS -> Form.NOVA
+                    neglect <= ADULT_OK_MAX_NEGLECT_MS -> Form.BUD
+                    else -> Form.GLOOP
+                }
+                neglect = 0L
+            }
+            t = end
         }
+
+        // If it was left alone so long that we skipped its growing up, it grew up neglected.
+        val stageNow = stage(now)
+        if (stageNow >= Stage.CHILD && childForm == null) childForm = Form.GRUB
+        if (stageNow == Stage.ADULT && adultForm == null) adultForm = Form.GLOOP
 
         return copy(
             lastTick = now,
@@ -122,10 +199,15 @@ data class PetState(
             joy = joy.coerceIn(0f, 100f),
             poops = poops,
             nextPoopAt = nextPoop,
+            sick = sick,
+            sickRiskMs = sickRisk,
+            neglectMs = neglect,
+            childForm = childForm,
+            adultForm = adultForm,
         )
     }
 
-    /** Apply a feed / play / clean. Call [advanceTo] first. */
+    /** Apply a feed / play / clean / medicine. Call [advanceTo] first. */
     fun apply(action: Action, now: Long): PetState {
         if (stage(now) == Stage.EGG) return this
         return when (action) {
@@ -136,19 +218,32 @@ data class PetState(
                 lastAction = action,
                 lastActionAt = now,
             )
-            Action.PLAY -> copy(
-                joy = (joy + 30f).coerceAtMost(100f),
-                food = (food - 5f).coerceAtLeast(0f),
-                lastAction = action,
-                lastActionAt = now,
-            )
+            Action.PLAY -> played(won = true, now = now, boost = 30f)
             Action.CLEAN -> copy(
                 poops = 0,
                 joy = if (poops > 0) (joy + 5f).coerceAtMost(100f) else joy,
                 lastAction = action,
                 lastActionAt = now,
             )
+            Action.MEDICINE -> if (!sick) this else copy(
+                sick = false,
+                sickRiskMs = 0L,
+                joy = (joy - 5f).coerceAtLeast(0f), // it doesn't like the taste
+                lastAction = action,
+                lastActionAt = now,
+            )
         }
+    }
+
+    /** After a mini-game (or a quick play on the Glyph Matrix). Ill pets can't play. */
+    fun played(won: Boolean, now: Long, boost: Float = if (won) 40f else 15f): PetState {
+        if (stage(now) == Stage.EGG || sick) return this
+        return copy(
+            joy = (joy + boost).coerceAtMost(100f),
+            food = (food - 5f).coerceAtLeast(0f),
+            lastAction = Action.PLAY,
+            lastActionAt = now,
+        )
     }
 
     companion object {
@@ -166,12 +261,20 @@ data class PetState(
         const val FOOD_PER_HOUR = 5.5f
         const val JOY_PER_HOUR = 4.5f
         const val POOP_GLOOM_PER_HOUR = 2f
+        const val SICK_GLOOM_PER_HOUR = 4f
         const val SLEEP_PACE = 0.3f
         const val POOP_EVERY_MS = 4 * HOUR_MS
         const val MAX_POOPS = 3
 
         const val LOW = 25f
         const val HIGH = 60f
+        const val STARVING = 10f
+        const val SICK_AFTER_MS = 2 * HOUR_MS
+
+        // Evolution thresholds: awake hours with needs unmet during the previous stage.
+        const val CHILD_GOOD_MAX_NEGLECT_MS = 3 * HOUR_MS
+        const val ADULT_GREAT_MAX_NEGLECT_MS = 4 * HOUR_MS
+        const val ADULT_OK_MAX_NEGLECT_MS = 12 * HOUR_MS
 
         const val NIGHT_START_HOUR = 23
         const val NIGHT_END_HOUR = 7

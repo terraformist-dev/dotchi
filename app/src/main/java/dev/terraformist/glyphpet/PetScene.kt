@@ -1,6 +1,9 @@
 package dev.terraformist.glyphpet
 
-/** The pet's look at each stage, plus where its face goes. */
+/**
+ * The pet's look at each stage/form, plus where its face goes.
+ * Every body leaves at least one lit row between the bottom of the eyes and the top of the mouth.
+ */
 private class Body(
     val sprite: Sprite,
     val eyeLeftX: Int,
@@ -39,7 +42,8 @@ private object Art {
         eyeLeftX = 2, eyeRightX = 6, eyeY = 2, eyeWidth = 1, mouthX = 4, mouthY = 5,
     )
 
-    val CHILD = Body(
+    // Child, well looked after: perky ears.
+    val PIP = Body(
         Sprite(
             ".#.......#.",
             ".##.....##.",
@@ -56,7 +60,25 @@ private object Art {
         eyeLeftX = 3, eyeRightX = 7, eyeY = 4, eyeWidth = 1, mouthX = 5, mouthY = 7,
     )
 
-    val ADULT = Body(
+    // Child, often neglected: a lumpy blob with stubby feet.
+    val GRUB = Body(
+        Sprite(
+            "...#####...",
+            "..#######..",
+            ".#########.",
+            ".#########.",
+            "###########",
+            "###########",
+            "###########",
+            "###########",
+            "###########",
+            ".##.....##.",
+        ),
+        eyeLeftX = 3, eyeRightX = 7, eyeY = 3, eyeWidth = 1, mouthX = 5, mouthY = 6,
+    )
+
+    // Adult, excellent care: antenna and long legs.
+    val NOVA = Body(
         Sprite(
             "......#......",
             ".....###.....",
@@ -73,6 +95,43 @@ private object Art {
             "..##.....##..",
         ),
         eyeLeftX = 3, eyeRightX = 8, eyeY = 5, eyeWidth = 2, mouthX = 6, mouthY = 8,
+    )
+
+    // Adult, decent care: round, with a sprout on top.
+    val BUD = Body(
+        Sprite(
+            ".......##....",
+            "......##.....",
+            "......#......",
+            "...#######...",
+            ".###########.",
+            "#############",
+            "#############",
+            "#############",
+            "#############",
+            "#############",
+            ".###########.",
+            "...#######...",
+            "...##...##...",
+        ),
+        eyeLeftX = 3, eyeRightX = 8, eyeY = 5, eyeWidth = 2, mouthX = 6, mouthY = 8,
+    )
+
+    // Adult, poor care: a wide, low, drippy blob.
+    val GLOOP = Body(
+        Sprite(
+            "....#####....",
+            "..#########..",
+            ".###########.",
+            "#############",
+            "#############",
+            "#############",
+            "#############",
+            "#############",
+            ".###########.",
+            "#.#.#...#.#.#",
+        ),
+        eyeLeftX = 3, eyeRightX = 8, eyeY = 3, eyeWidth = 2, mouthX = 6, mouthY = 6,
     )
 
     val FOOD = Sprite(
@@ -95,6 +154,13 @@ private object Art {
         "##.##",
         "..#..",
         "..#..",
+    )
+    val PILL = Sprite(
+        "...##",
+        "..###",
+        ".###.",
+        "###..",
+        "##...",
     )
     val HEART = Sprite(
         ".#.#.",
@@ -123,12 +189,22 @@ private object Art {
         Action.FEED -> FOOD
         Action.PLAY -> PLAY
         Action.CLEAN -> CLEAN
+        Action.MEDICINE -> PILL
+    }
+
+    fun body(stage: Stage, form: Form?): Body = when (form) {
+        Form.PIP -> PIP
+        Form.GRUB -> GRUB
+        Form.NOVA -> NOVA
+        Form.BUD -> BUD
+        Form.GLOOP -> GLOOP
+        null -> if (stage == Stage.ADULT) NOVA else if (stage == Stage.CHILD) PIP else BABY
     }
 }
 
 /**
- * Draws the whole 25x25 scene. Used by both the Glyph Matrix and the widget,
- * so the pet looks identical in both places.
+ * Draws the whole 25x25 scene. Used by the Glyph Matrix, the widget and the app,
+ * so the pet looks identical everywhere.
  */
 object PetScene {
 
@@ -138,11 +214,15 @@ object PetScene {
     private const val CENTER_X = 12
 
     /**
-     * @param animate false for a still picture (widget, always-on display).
+     * @param animate false for a still picture.
      * @param selected the action picked with the Glyph Button but not done yet.
      * @param selectProgress 0..1, how far through the "wait to confirm" countdown.
      * @param anim the clock used for animation (bounce, blink). Defaults to [now]; the widget
      *   passes made-up times to pre-draw a short looping animation.
+     * @param look -1 = looking left, 0 = ahead, 1 = right (mini-games).
+     * @param moodOverride show this mood instead of the real one (mini-game reactions).
+     * @param topText text shown above the pet instead of the usual icons (mini-games).
+     * @param hud false hides the icons above the pet.
      */
     fun render(
         state: PetState,
@@ -151,9 +231,13 @@ object PetScene {
         selected: Action? = null,
         selectProgress: Float = 0f,
         anim: Long = now,
+        look: Int = 0,
+        moodOverride: Mood? = null,
+        topText: String? = null,
+        hud: Boolean = true,
     ): DotGrid {
         val g = DotGrid(SIZE, SIZE)
-        val mood = state.mood(now)
+        val mood = moodOverride ?: state.mood(now)
         val stage = state.stage(now)
 
         drawGround(g)
@@ -162,10 +246,16 @@ object PetScene {
             drawEgg(g, state, now, anim, animate)
         } else {
             drawPoops(g, state.poops, anim, animate)
-            drawPet(g, stage, mood, anim, animate)
+            drawPet(g, Art.body(stage, state.form(now)), mood, anim, animate, look)
         }
 
-        drawTop(g, state, mood, anim, animate, selected, selectProgress)
+        when {
+            topText != null -> {
+                val x = (SIZE - DotFont.width(topText)) / 2
+                g.text(topText, x, 1)
+            }
+            hud -> drawTop(g, state, mood, anim, animate, selected, selectProgress)
+        }
 
         // Anything outside the real matrix shape stays dark.
         for (y in 0 until SIZE) for (x in 0 until SIZE) {
@@ -196,42 +286,44 @@ object PetScene {
         }
     }
 
-    private fun drawPoops(g: DotGrid, count: Int, now: Long, animate: Boolean) {
+    private fun drawPoops(g: DotGrid, count: Int, anim: Long, animate: Boolean) {
         val spots = listOf(2 to 17, 20 to 17, 2 to 13)
         for (i in 0 until minOf(count, spots.size)) {
             val (x, y) = spots[i]
             g.stamp(Art.POOP, x, y, level = 170)
             // A little wisp of smell.
-            val wisp = !animate || ((now / 400) + i) % 2 == 0L
+            val wisp = !animate || ((anim / 400) + i) % 2 == 0L
             if (wisp) g.set(x + 1, y - 2, 70)
         }
     }
 
-    private fun drawPet(g: DotGrid, stage: Stage, mood: Mood, now: Long, animate: Boolean) {
-        val body = when (stage) {
-            Stage.BABY -> Art.BABY
-            Stage.CHILD -> Art.CHILD
-            else -> Art.ADULT
-        }
+    private fun drawPet(g: DotGrid, body: Body, mood: Mood, anim: Long, animate: Boolean, look: Int) {
         val sprite = body.sprite
 
         val lift = if (!animate) 0 else when (mood) {
-            Mood.PLAYING -> if ((now / 180) % 2 == 0L) 2 else 0
-            Mood.HAPPY, Mood.OK, Mood.CLEANING -> ((now / 500) % 2).toInt()
-            Mood.EATING -> ((now / 250) % 2).toInt()
-            Mood.SAD -> if ((now / 1400) % 2 == 0L) 0 else 1
+            Mood.PLAYING -> if ((anim / 180) % 2 == 0L) 2 else 0
+            Mood.HAPPY, Mood.OK, Mood.CLEANING -> ((anim / 500) % 2).toInt()
+            Mood.EATING -> ((anim / 250) % 2).toInt()
+            Mood.SAD -> if ((anim / 1400) % 2 == 0L) 0 else 1
             else -> 0
         }
-        val left = CENTER_X - sprite.width / 2
+        // An ill pet shivers from side to side instead of bouncing.
+        val shiver = if (animate && mood == Mood.SICK) (if ((anim / 300) % 2 == 0L) 0 else 1) else 0
+        val left = CENTER_X - sprite.width / 2 + shiver
         val top = FEET_Y - sprite.height + 1 - lift
-        val level = if (mood == Mood.SLEEPING) 150 else 255
+        val level = when (mood) {
+            Mood.SLEEPING -> 150
+            Mood.SICK -> 120
+            else -> 255
+        }
         g.stamp(sprite, left, top, level)
 
         // Eyes
         val ey = top + body.eyeY
-        val blink = animate && (now % 3400) < 160
-        val eyesClosed = mood == Mood.SLEEPING || mood == Mood.PLAYING || blink
-        for (ex in listOf(left + body.eyeLeftX, left + body.eyeRightX)) {
+        val blink = animate && (anim % 3400) < 160
+        val eyesClosed = mood == Mood.SLEEPING || mood == Mood.PLAYING || mood == Mood.SICK ||
+            mood == Mood.MEDICATED || blink
+        for (ex in listOf(left + body.eyeLeftX + look, left + body.eyeRightX + look)) {
             for (dx in 0 until body.eyeWidth) {
                 if (eyesClosed) {
                     g.carve(ex + dx, ey + 1)
@@ -243,12 +335,12 @@ object PetScene {
         }
 
         // Mouth
-        val mx = left + body.mouthX
+        val mx = left + body.mouthX + look
         val my = top + body.mouthY
         when (mood) {
             Mood.HAPPY, Mood.PLAYING, Mood.CLEANING -> smile(g, mx, my)
-            Mood.SAD -> frown(g, mx, my)
-            Mood.EATING -> if (!animate || (now / 250) % 2 == 0L) openMouth(g, mx, my) else flat(g, mx, my)
+            Mood.SAD, Mood.SICK -> frown(g, mx, my)
+            Mood.EATING -> if (!animate || (anim / 250) % 2 == 0L) openMouth(g, mx, my) else flat(g, mx, my)
             Mood.SLEEPING -> g.carve(mx, my + 1)
             else -> flat(g, mx, my)
         }
@@ -277,7 +369,7 @@ object PetScene {
         g: DotGrid,
         state: PetState,
         mood: Mood,
-        now: Long,
+        anim: Long,
         animate: Boolean,
         selected: Action?,
         selectProgress: Float,
@@ -296,23 +388,24 @@ object PetScene {
         when (mood) {
             Mood.PLAYING -> g.stamp(Art.HEART, iconX, iconY + 1, red = true)
             Mood.EATING -> g.stamp(Art.FOOD, iconX, iconY, level = 120)
+            Mood.MEDICATED -> g.stamp(Art.PILL, iconX, iconY, level = 120)
             Mood.CLEANING -> {
-                val flip = animate && (now / 300) % 2 == 0L
+                val flip = animate && (anim / 300) % 2 == 0L
                 if (flip) { g.stamp(Art.SPARK, 4, 6); g.stamp(Art.SPARK, 18, 9) }
                 else { g.stamp(Art.SPARK, 18, 5); g.stamp(Art.SPARK, 4, 10) }
             }
             Mood.SLEEPING -> {
-                val rise = if (animate && (now / 900) % 2 == 0L) 1 else 0
+                val rise = if (animate && (anim / 900) % 2 == 0L) 1 else 0
                 g.stamp(Art.ZED, 16, 3 - rise, level = 170)
             }
-            Mood.EGG -> {}
-            else -> {
+            Mood.SAD, Mood.SICK -> {
                 val need = state.mostNeeded()
-                if (need != null && mood == Mood.SAD) {
-                    val on = !animate || (now / 600) % 2 == 0L
+                if (need != null) {
+                    val on = !animate || (anim / 600) % 2 == 0L
                     if (on) g.stamp(Art.icon(need), iconX, iconY, red = true)
                 }
             }
+            else -> {}
         }
     }
 }

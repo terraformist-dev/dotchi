@@ -4,6 +4,14 @@ Owner has no coding experience and works only from a phone. Explain changes in p
 never ask them to run commands, and always finish by pushing to `main` and confirming the
 GitHub Actions build went green (the build publishes `glyph-pet.apk` as the latest release).
 
+## The Guide must stay current
+
+The in-app Guide (`app/src/main/java/dev/terraformist/glyphpet/Guide.kt`) is written for someone
+who has never had a virtual pet. **Any change that affects how a person looks after or interacts
+with the pet (actions, rules, timings, controls, screens, widget, Glyph Toy) must update the Guide
+in the same commit.** Keep the main screen uncluttered: instructions belong in the Guide, not on
+the pet screen.
+
 ## Project
 
 Android app (Kotlin, no AndroidX, no Compose), package `dev.terraformist.glyphpet`,
@@ -26,4 +34,7 @@ install over the old app and keep the saved pet. Don't change the key or applica
 ## Design
 
 Nothing look: black, white dots, one red accent (`#D71921`), faint unlit "ghost" dots,
-3×5 dot font (`DotFont`). The same `PetScene` renders the widget and the matrix.
+3×5 dot font (`DotFont`). The same `PetScene` renders the app, widget and matrix.
+Owner wants screens calm and uncluttered: show things only when they're relevant
+(e.g. MEDS replaces PLAY only while ill). Mini-games are app-only for now; Glyph Play is a quick play.
+Every body sprite keeps a lit row between the bottom of the eyes and the top of the mouth.

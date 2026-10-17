@@ -59,8 +59,6 @@ class PetWidgetProvider : AppWidgetProvider() {
             val frames = FRAME_TIMES.map { t ->
                 DotPainter.paintPet(PetScene.render(state, now, animate = true, anim = t), pitch = 12)
             }
-            val need = state.mostNeeded()
-
             for (id in ids) {
                 val views = RemoteViews(context.packageName, R.layout.widget_pet)
                 FRAME_IDS.forEachIndexed { i, viewId ->
@@ -68,9 +66,11 @@ class PetWidgetProvider : AppWidgetProvider() {
                     views.setOnClickPendingIntent(viewId, openApp(context))
                 }
 
-                bindButton(context, views, R.id.btn_feed, Action.FEED, "FEED", state, need)
-                bindButton(context, views, R.id.btn_play, Action.PLAY, "PLAY", state, need)
-                bindButton(context, views, R.id.btn_clean, Action.CLEAN, "CLEAN", state, need)
+                // Middle button is Play, or Medicine while the pet is ill.
+                val (left, middle, right) = state.actions()
+                bindButton(context, views, R.id.btn_feed, left, state)
+                bindButton(context, views, R.id.btn_play, middle, state)
+                bindButton(context, views, R.id.btn_clean, right, state)
 
                 manager.updateAppWidget(id, views)
             }
@@ -81,11 +81,14 @@ class PetWidgetProvider : AppWidgetProvider() {
             views: RemoteViews,
             viewId: Int,
             action: Action,
-            label: String,
             state: PetState,
-            need: Action?,
         ) {
-            views.setImageViewBitmap(viewId, buttonBitmap(label, state.level(action), highlight = need == action))
+            views.setImageViewBitmap(viewId, buttonFor(action, state))
+            if (action == Action.PLAY) {
+                // Play means a mini-game, which lives in the app.
+                views.setOnClickPendingIntent(viewId, openGame(context))
+                return
+            }
             val intent = Intent(context, PetWidgetProvider::class.java)
                 .setAction(ACTION_PET)
                 .putExtra(EXTRA_ACTION, action.name)
@@ -98,15 +101,33 @@ class PetWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(viewId, pending)
         }
 
-        /** A dot-matrix label with a 5-dot meter under it. */
-        fun buttonBitmap(label: String, level: Int, highlight: Boolean): Bitmap {
+        fun label(action: Action): String = when (action) {
+            Action.FEED -> "FEED"
+            Action.PLAY -> "PLAY"
+            Action.CLEAN -> "CLEAN"
+            Action.MEDICINE -> "MEDS"
+        }
+
+        /** The button picture for an action, as it should look right now. */
+        fun buttonFor(action: Action, state: PetState): Bitmap =
+            if (action == Action.MEDICINE) {
+                buttonBitmap(label(action), 5, highlight = true, alarm = true)
+            } else {
+                buttonBitmap(label(action), state.level(action), highlight = state.mostNeeded() == action)
+            }
+
+        /**
+         * A dot-matrix label with a 5-dot meter under it.
+         * [alarm] lights the whole meter red (used for Medicine).
+         */
+        fun buttonBitmap(label: String, level: Int, highlight: Boolean, alarm: Boolean = false): Bitmap {
             val g = DotGrid(21, 9)
             val textX = (g.width - DotFont.width(label)) / 2
             g.text(label, textX, 0, red = highlight)
             val meterX = (g.width - 9) / 2
             for (i in 0 until 5) {
                 val lit = i < level
-                val low = level <= 1
+                val low = level <= 1 || alarm
                 g.set(meterX + i * 2, 7, if (lit) 255 else 0, red = lit && low)
             }
             return DotPainter.paint(g, pitch = 8, ghosts = false).let { withMeterGhosts(it, g, meterX) }
@@ -126,6 +147,13 @@ class PetWidgetProvider : AppWidgetProvider() {
             }
             return bmp
         }
+
+        private fun openGame(context: Context): PendingIntent = PendingIntent.getActivity(
+            context,
+            1,
+            Intent(context, GameActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
         private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
             context,
