@@ -1,6 +1,6 @@
 # Dotchi
 
-Dotchi is a Tamagotchi-style pet for the Nothing Phone (3). It lives in an app, a home-screen widget and the Nothing Phone 3 glyph matrix.
+Dotchi is a Tamagotchi-style pet for the Nothing Phone (3). It lives in an app, a home-screen widget and the Nothing Phone (3) glyph matrix.
 
 ## Getting the app onto your phone
 
