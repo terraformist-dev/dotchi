@@ -67,6 +67,17 @@ object PetStore {
         }
     }
 
+    /** Met a friend's pet for the first time today. */
+    fun metFriend(context: Context, now: Long = System.currentTimeMillis()): PetState {
+        val updated = synchronized(lock) {
+            val next = load(context, now).advanceTo(now).metFriend(now)
+            save(context, next)
+            next
+        }
+        PetWidgetProvider.refreshAll(context)
+        return updated
+    }
+
     /** End a nap caused by darkness (e.g. the phone was flipped over to say hello). */
     fun wakeFromDarkNap(context: Context, now: Long = System.currentTimeMillis()) {
         synchronized(lock) {

@@ -36,6 +36,8 @@ Everything is explained in the app: tap **GUIDE** on the pet screen.
 | `GlyphPetToyService.kt` | The Glyph Toy. |
 | `MainActivity.kt` | The main pet screen. |
 | `GameActivity.kt` | Mini-games: Left or Right, Higher or Lower. |
+| `LockScreenPet.kt` | The optional lock-screen pet card (and shared status words). |
+| `MeetActivity.kt` | Meeting other Glyph Pets over Bluetooth, and the friends list. |
 | `Guide.kt` / `GuideActivity.kt` | The in-app Guide. Update it whenever how you care for the pet changes. |
 
 The pet never runs in the background. Whenever anything shows it, `PetState.advanceTo()` works out what happened since it was last looked at.

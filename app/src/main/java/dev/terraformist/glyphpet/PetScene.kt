@@ -320,6 +320,77 @@ object PetScene {
         return g
     }
 
+    // ---- Meeting another Glyph Pet ----------------------------------------------------
+
+    /** A one-byte code for which pet this is, sent to other phones when meeting. */
+    fun formCode(state: PetState, now: Long): Int = when (state.stage(now)) {
+        Stage.EGG -> 0
+        Stage.BABY -> 1
+        else -> when (state.form(now)) {
+            Form.PIP -> 2
+            Form.GRUB -> 3
+            Form.NOVA -> 4
+            Form.BUD -> 5
+            Form.GLOOP -> 6
+            null -> 1
+        }
+    }
+
+    fun nameForCode(code: Int): String = when (code) {
+        0 -> "EGG"
+        2 -> Form.PIP.label
+        3 -> Form.GRUB.label
+        4 -> Form.NOVA.label
+        5 -> Form.BUD.label
+        6 -> Form.GLOOP.label
+        else -> "BABY"
+    }
+
+    private fun bodyForCode(code: Int): Body = when (code) {
+        2 -> Art.PIP
+        3 -> Art.GRUB
+        4 -> Art.NOVA
+        5 -> Art.BUD
+        6 -> Art.GLOOP
+        else -> Art.BABY
+    }
+
+    const val MEET_WIDTH = 33
+    const val MEET_HEIGHT = 21
+
+    /**
+     * Two pets side by side: yours on the left facing right, your friend on the right facing
+     * left, with hearts between them. Without a friend ([friendCode] null), yours looks around.
+     */
+    fun renderMeeting(state: PetState, now: Long, friendCode: Int?, anim: Long = now): DotGrid {
+        val g = DotGrid(MEET_WIDTH, MEET_HEIGHT)
+        val feet = MEET_HEIGHT - 2
+        for (x in 1 until MEET_WIDTH step 2) g.set(x, feet + 1, 40)
+
+        val mine = Art.body(state.stage(now), state.form(now))
+        if (friendCode == null) {
+            // Searching: in the middle, glancing left and right.
+            val look = if ((anim / 900) % 2 == 0L) -1 else 1
+            drawPet(g, mine, Mood.OK, anim, animate = true, look = look, waving = false, waking = -1f,
+                centerX = MEET_WIDTH / 2, feetY = feet)
+            // "..." searching dots above it.
+            val lit = ((anim / 400) % 4).toInt()
+            for (i in 0 until 3) g.set(MEET_WIDTH / 2 - 2 + i * 2, 1, if (i < lit) 200 else 40)
+            return g
+        }
+
+        drawPet(g, mine, Mood.HAPPY, anim, animate = true, look = 1, waving = false, waking = -1f,
+            centerX = 8, feetY = feet)
+        drawPet(g, bodyForCode(friendCode), Mood.HAPPY, anim + 250, animate = true, look = -1,
+            waving = true, waking = -1f, centerX = MEET_WIDTH - 9, feetY = feet)
+        // Hearts drifting up between them.
+        val rise = ((anim / 300) % 4).toInt()
+        g.stamp(Art.HEART, MEET_WIDTH / 2 - 2, 4 - rise.coerceAtMost(3), red = true)
+        return g
+    }
+
+    // ---- Shared bits ------------------------------------------------------------------
+
     private fun drawGround(g: DotGrid, scroll: Int = 0) {
         for (x in 0 until SIZE) g.set(x, GROUND_Y, 0)
         for (x in (3 + scroll)..21 step 2) g.set(x, GROUND_Y, 40)
@@ -398,6 +469,8 @@ object PetScene {
         look: Int,
         waving: Boolean,
         waking: Float,
+        centerX: Int = CENTER_X,
+        feetY: Int = FEET_Y,
     ) {
         val sprite = body.sprite
         // Waking up: first a sleepy wriggle, then a jump with wide eyes.
@@ -418,8 +491,8 @@ object PetScene {
         // Playing: dash from side to side as well as hopping.
         val dash = if (animate && mood == Mood.PLAYING) intArrayOf(0, 2, 3, 2, 0, -2, -3, -2)[((anim / 150) % 8).toInt()] else 0
         val wriggle = if (animate && wakingWriggle) (if ((anim / 90) % 2 == 0L) -1 else 1) else 0
-        val left = CENTER_X - sprite.width / 2 + shiver + dash + wriggle
-        val top = FEET_Y - sprite.height + 1 - lift
+        val left = centerX - sprite.width / 2 + shiver + dash + wriggle
+        val top = feetY - sprite.height + 1 - lift
         val level = when {
             mood == Mood.SLEEPING || wakingWriggle -> 150
             mood == Mood.SICK -> 120

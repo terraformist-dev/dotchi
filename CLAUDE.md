@@ -47,3 +47,7 @@ The light sensor faces the screen side, so light is ignored while the phone is f
 The Glyph Toy can't run in the background between frames: anything time-based must be lazily
 computed in `PetState.advanceTo`, and waking the matrix relies on screen-on, charger broadcasts,
 significant-motion, a wake-up light sensor if present, or a short light check every 2 minutes.
+Lock screen: widget is `home_screen|keyguard` (in case the OS allows it) plus an opt-in silent
+notification card (`LockScreenPet`), refreshed via `PetWidgetProvider.refreshAll` and a half-hourly
+inexact alarm. Meet (`MeetActivity`): BLE advertise + scan, manufacturer data 0xFFFF with payload
+`'G','P',version,formCode,id(4 bytes)`; RSSI > -75 counts as close; boost once per friend per day.

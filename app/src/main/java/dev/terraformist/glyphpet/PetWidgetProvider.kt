@@ -20,12 +20,22 @@ class PetWidgetProvider : AppWidgetProvider() {
         Senses.sample(context) {
             Weather.refreshIfStale(context) {
                 draw(context, manager, ids)
+                LockScreenPet.update(context)
                 pending.finish()
             }
         }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_REFRESH) {
+            // Half-hourly refresh for the lock-screen card.
+            val pending = goAsync()
+            Senses.sample(context) {
+                refreshAll(context)
+                pending.finish()
+            }
+            return
+        }
         if (intent.action == ACTION_PET) {
             val action = intent.getStringExtra(EXTRA_ACTION)
                 ?.let { name -> Action.entries.firstOrNull { it.name == name } }
@@ -47,6 +57,7 @@ class PetWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val ACTION_PET = "dev.terraformist.glyphpet.PET_ACTION"
+        const val ACTION_REFRESH = "dev.terraformist.glyphpet.REFRESH"
         private const val EXTRA_ACTION = "action"
 
         private val FRAME_IDS = intArrayOf(R.id.pet_0, R.id.pet_1, R.id.pet_2, R.id.pet_3, R.id.pet_4, R.id.pet_5)
@@ -59,6 +70,21 @@ class PetWidgetProvider : AppWidgetProvider() {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, PetWidgetProvider::class.java))
             if (ids.isNotEmpty()) draw(context, manager, ids)
+            // Every change to the pet passes through here, so keep the lock-screen card in step too.
+            LockScreenPet.update(context)
+        }
+
+        /** A tap that feeds / plays / cleans / medicates without opening the app (widget and lock screen). */
+        fun actionIntent(context: Context, action: Action): PendingIntent {
+            val intent = Intent(context, PetWidgetProvider::class.java)
+                .setAction(ACTION_PET)
+                .putExtra(EXTRA_ACTION, action.name)
+            return PendingIntent.getBroadcast(
+                context,
+                action.ordinal + 1,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
         }
 
         private fun draw(context: Context, manager: AppWidgetManager, ids: IntArray) {

@@ -19,6 +19,7 @@ class MainActivity : Activity() {
     private lateinit var petView: ImageView
     private lateinit var statusView: TextView
     private lateinit var buttons: List<ImageView>
+    private lateinit var lockToggle: TextView
 
     // Shake the phone: wakes it if it's asleep, otherwise a quick play.
     // The light sensor and step counter are read here too.
@@ -55,6 +56,13 @@ class MainActivity : Activity() {
         findViewById<TextView>(R.id.guide).setOnClickListener {
             startActivity(Intent(this, GuideActivity::class.java))
         }
+        findViewById<TextView>(R.id.meet).setOnClickListener {
+            startActivity(Intent(this, MeetActivity::class.java))
+        }
+
+        lockToggle = findViewById(R.id.lock_toggle)
+        lockToggle.setOnClickListener { toggleLockScreen() }
+        showLockToggle()
 
         findViewById<TextView>(R.id.reset).setOnClickListener {
             AlertDialog.Builder(this)
@@ -89,8 +97,28 @@ class MainActivity : Activity() {
             .show()
     }
 
+    private fun toggleLockScreen() {
+        if (LockScreenPet.isOn(this)) {
+            LockScreenPet.setOn(this, false)
+        } else if (LockScreenPet.canNotify(this)) {
+            LockScreenPet.setOn(this, true)
+        } else {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFY_REQUEST)
+        }
+        showLockToggle()
+    }
+
+    private fun showLockToggle() {
+        lockToggle.text = if (LockScreenPet.isOn(this)) "PET ON LOCK SCREEN: ON" else "PET ON LOCK SCREEN: OFF"
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTIFY_REQUEST) {
+            if (LockScreenPet.canNotify(this)) LockScreenPet.setOn(this, true)
+            showLockToggle()
+            return
+        }
         if (requestCode != PERMISSIONS_REQUEST) return
         // Start counting steps and fetch the weather now that we're allowed to.
         sensors.stop()
@@ -113,6 +141,7 @@ class MainActivity : Activity() {
         handler.post(loop)
         sensors.start()
         Weather.refreshIfStale(this) { render() }
+        LockScreenPet.keepFresh(this)
         PetWidgetProvider.refreshAll(this)
     }
 
@@ -153,28 +182,13 @@ class MainActivity : Activity() {
             val left = ((PetState.EGG_MS - (now - state.bornAt)) / 1000L).coerceAtLeast(0L)
             return "EGG  ·  HATCHING IN ${left / 60}:${"%02d".format(left % 60)}"
         }
-        val mood = when (state.mood(now)) {
-            Mood.SICK -> "ILL"
-            Mood.SLEEPING -> when (state.nap) {
-                Nap.CHARGING -> "RECHARGING"
-                Nap.DARK -> if (PetState.isNight(now)) "ASLEEP" else "NAPPING"
-                null -> "ASLEEP"
-            }
-            Mood.HAPPY -> "HAPPY"
-            Mood.SAD -> "UNHAPPY"
-            Mood.EATING -> "EATING"
-            Mood.PLAYING -> "PLAYING"
-            Mood.CLEANING -> "FRESH"
-            Mood.MEDICATED -> "YUCK!"
-            Mood.WAKING -> "WAKING UP"
-            Mood.WALKING -> "WALKING"
-            else -> "CONTENT"
-        }
+        val mood = Status.moodWord(state, now)
         return "${state.name(now)}  ·  DAY ${state.day(now)}  ·  $mood"
     }
 
     companion object {
         private const val PERMISSIONS_REQUEST = 1
+        private const val NOTIFY_REQUEST = 2
 
         /** A heading written in the dot font. */
         fun dotTitle(text: String) = DotGrid(DotFont.width(text), DotFont.HEIGHT).let { g ->

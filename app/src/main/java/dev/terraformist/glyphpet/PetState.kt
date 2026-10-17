@@ -305,6 +305,16 @@ data class PetState(
         }
     }
 
+    /** Met a friend's pet (first time today with that friend): a big cheer-up and some hearts. */
+    fun metFriend(now: Long): PetState {
+        if (stage(now) == Stage.EGG) return this
+        return copy(
+            joy = (joy + FRIEND_JOY).coerceAtMost(100f),
+            lastAction = Action.PLAY,
+            lastActionAt = now,
+        )
+    }
+
     /** After a mini-game (or a quick play on the Glyph Matrix). Ill pets can't play. */
     fun played(won: Boolean, now: Long, boost: Float = if (won) 40f else 15f): PetState {
         if (stage(now) == Stage.EGG || sick) return this
@@ -342,6 +352,7 @@ data class PetState(
         const val STEP_GOAL = 5_000
         const val STEP_GOAL_JOY = 15f
         const val WALKING_SHOW_MS = 15_000L
+        const val FRIEND_JOY = 20f
         const val CHARGING_JOY_PER_HOUR = 6f
         const val POOP_EVERY_MS = 4 * HOUR_MS
         const val MAX_POOPS = 3
