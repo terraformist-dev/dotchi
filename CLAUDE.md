@@ -1,11 +1,11 @@
-# Dotchi (repo glyph-pet): notes for Claude
+# Dotchi (repo terraformist-dev/dotchi, formerly glyph-pet): notes for Claude
 
 Owner has no coding experience and works only from a phone. Explain changes in plain English,
 never ask them to run commands, and always finish by pushing to `main` and confirming the
 GitHub Actions build went green (the build publishes `dotchi.apk` as the latest release).
 
 The app is called **Dotchi** (renamed from Glyph Pet in build 12). Code names (package
-`dev.terraformist.glyphpet`, class names, repo `glyph-pet`) stay as they are.
+`dev.terraformist.glyphpet`, class names) stay as they are. The GitHub repo was renamed to `terraformist-dev/dotchi`.
 
 ## The Guide must stay current
 
