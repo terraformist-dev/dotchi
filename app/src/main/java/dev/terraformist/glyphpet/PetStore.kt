@@ -141,7 +141,11 @@ object PetStore {
     /** Record the result of a mini-game (app or Glyph Matrix). */
     fun played(context: Context, won: Boolean, now: Long = System.currentTimeMillis()): PetState {
         val factor = if (climate(context, now)?.rainy == true) PetState.RAINY_PLAY_FACTOR else 1f
-        return update(context, now) { it.played(won, now, boost = (if (won) 40f else 15f) * factor) }
+        return update(context, now) {
+            val next = it.played(won, now, boost = (if (won) 40f else 15f) * factor)
+            // A win (not a refusal) earns the happy glow.
+            if (won && next.lastActionAt == now) next.copy(glowAt = now) else next
+        }
     }
 
     /** It turns down a game because it's played out (shakes its head). */
@@ -216,6 +220,7 @@ object PetStore {
             playBurstStart = p.getLong("playBurstStart", 0L),
             playedOutUntil = p.getLong("playedOutUntil", 0L),
             refusedAt = p.getLong("refusedAt", 0L),
+            glowAt = p.getLong("glowAt", 0L),
         )
     }
 
@@ -260,6 +265,7 @@ object PetStore {
             .putLong("playBurstStart", s.playBurstStart)
             .putLong("playedOutUntil", s.playedOutUntil)
             .putLong("refusedAt", s.refusedAt)
+            .putLong("glowAt", s.glowAt)
             .apply()
     }
 }

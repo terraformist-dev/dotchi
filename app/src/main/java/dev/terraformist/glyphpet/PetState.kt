@@ -81,6 +81,7 @@ data class PetState(
     val playBurstStart: Long = 0L, // ...which started here
     val playedOutUntil: Long = 0L, // won't play again until then
     val refusedAt: Long = 0L,     // last time it turned down a game
+    val glowAt: Long = 0L,        // last good feed, game win or friend: a happy glow follows
 ) {
 
     fun stage(now: Long): Stage {
@@ -131,6 +132,13 @@ data class PetState(
 
     /** Had lots of play recently and wants a break from it. */
     fun isPlayedOut(now: Long): Boolean = now < playedOutUntil
+
+    /** 0..1 through the happy glow (rings and a heart) that follows a good feed, a win or a friend; -1 if none. */
+    fun glowProgress(now: Long): Float {
+        if (glowAt <= 0L) return -1f
+        val t = now - glowAt - REACT_MS // starts once the eating/playing reaction has finished
+        return if (t in 0L until GLOW_MS) t.toFloat() / GLOW_MS else -1f
+    }
 
     /** Shakes its head at a game (because it's played out). */
     fun refusePlay(now: Long): PetState = copy(refusedAt = now)
@@ -426,6 +434,7 @@ data class PetState(
                 nextPoopAt = minOf(nextPoopAt, now + 90 * MINUTE_MS),
                 lastAction = action,
                 lastActionAt = now,
+                glowAt = now,
             )
             Action.PLAY -> played(won = true, now = now, boost = 30f)
             Action.CLEAN -> copy(
@@ -451,6 +460,7 @@ data class PetState(
             joy = (joy + FRIEND_JOY).coerceAtMost(100f),
             lastAction = Action.PLAY,
             lastActionAt = now,
+            glowAt = now,
         )
     }
 
@@ -485,6 +495,9 @@ data class PetState(
         const val CHILD_MS = 3 * DAY_MS
 
         const val REACT_MS = 3_000L
+        const val GLOW_MS = 6_000L
+        /** Medicine: a bright wave runs down through it for this long, then it glows well again. */
+        const val MEDICINE_WAVE_MS = 1_200L
         const val AWAKE_AFTER_ACTION_MS = 60_000L
 
         const val FOOD_PER_HOUR = 5.5f

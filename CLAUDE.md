@@ -72,4 +72,13 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   `PetWidgetProvider` (action NUDGE); blinks the need icon via `setAppMatrixFrame` when face-down.
 - Hello wave (toy picked / flipped face-down) only when the pet is awake: not egg, not `isAsleep` (night or nap). It never wakes the pet.
 - Widget refresh: non-wakeup repeating alarm every 60s (`PetWidgetProvider.keepTicking`), so it ticks while the phone is awake and fires on screen-on; plus the 30-minute `updatePeriodMillis`.
+- Softer animations (build 17, owner picked from a design canvas): keep the crisp Tamagotchi feel, no
+  sub-dot blurring of the pet. Bodies are shaded (`PetScene.shading`, brighter top-left, dimmer edges) with
+  half-bright cheeks at mouthX±4. Rain/snow at three depths, rain tails + splashes, snow lying on row 21.
+  Need icons and Glyph nudges pulse like a heartbeat (`heartbeat`, 1.8s) with a faint ripple; red dots can
+  now dim (`DotPainter`). Ill = blotchy shimmer (`illShimmer`); medicine = bright wave down the body
+  (`MEDICINE_WAVE_MS`) then sparkles. `glowAt` (good feed, game win, friend) -> rings + flickering heart
+  for `GLOW_MS` after the reaction. Egg speckles/crack glow faster as it nears hatching; hatching flashes.
+  Glyph Toy opens out from a centre dot when picked and shrinks into one when unpicked (`powerOn/powerOff`).
+  The play heart flickers. Dotchi's and the egg's own movements are unchanged on purpose.
 - Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). 5 plays within 30 min -> played out for 45 min (`playedOutUntil`): play attempts are refused with a head shake (REFUSING), PLAY label faded.

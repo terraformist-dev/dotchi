@@ -1,5 +1,12 @@
 package dev.terraformist.glyphpet
 
+import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.roundToInt
+import kotlin.math.sin
+
 /**
  * The pet's look at each stage/form, plus where its face goes.
  * Every body leaves at least one lit row between the bottom of the eyes and the top of the mouth.
@@ -341,15 +348,27 @@ object PetScene {
             drawPoops(g, state.poops, anim, animate)
             val waking = if (mood == Mood.WAKING) (now - state.wokenAt).toFloat() / PetState.WAKING_ANIM_MS else -1f
             val growing = if (mood == Mood.GROWING) (now - state.cutsceneAt).toFloat() / PetState.GROW_MS else -1f
+            val medicine = if (mood == Mood.MEDICATED) (now - state.lastActionAt).toFloat() / PetState.MEDICINE_WAVE_MS else -1f
+            val body = Art.body(stage, state.form(now))
+            // After a good feed, a win or a friend: faint rings ripple out around it, and a heart floats up.
+            val glow = state.glowProgress(now)
+            if (animate && glow >= 0f && moodOverride == null && mood in GLOW_MOODS) {
+                val shape = DotGrid(SIZE, SIZE)
+                drawPet(shape, body, mood, anim, animate, look, greeting, waking, season = season)
+                drawGlow(g, shape, anim)
+            }
             drawPet(
-                g, Art.body(stage, state.form(now)), mood, anim, animate, look, greeting, waking,
-                season = season, growing = growing,
+                g, body, mood, anim, animate, look, greeting, waking,
+                season = season, growing = growing, medicine = medicine,
             )
+            // Hatching: the egg bursts into light, which fades out from the middle.
+            if (stage == Stage.BABY && growing in 0f..HATCH_FLASH) drawHatchFlash(g, growing / HATCH_FLASH)
         }
 
         // Walking: the ground slides past underneath.
         val scroll = if (animate && mood == Mood.WALKING) ((anim / 200) % 2).toInt() else 0
         drawGround(g, scroll)
+        if (weather?.sky == Sky.SNOW) drawSnowCover(g)
 
         when {
             topText != null -> {
@@ -365,6 +384,46 @@ object PetScene {
             }
         }
         return mask(g)
+    }
+
+    // ---- Switching the Glyph Matrix on and off (like an old TV) -------------------------
+
+    /** Switching on: a dot appears in the middle, then the picture opens out from it. [p] is 0..1. */
+    fun powerOn(scene: DotGrid, p: Float): DotGrid {
+        val out = DotGrid(SIZE, SIZE)
+        if (p < 0.3f) {
+            centreDot(out, ease(p / 0.3f))
+        } else {
+            val r = ease((p - 0.3f) / 0.7f) * 18f
+            copyWithin(scene, out, r)
+            if (r < 2f) centreDot(out, 1f)
+        }
+        return mask(out)
+    }
+
+    /** Switching off: the picture shrinks into one glowing dot, which then fades. [p] is 0..1. */
+    fun powerOff(scene: DotGrid, p: Float): DotGrid {
+        val out = DotGrid(SIZE, SIZE)
+        if (p < 0.65f) {
+            val q = p / 0.65f
+            copyWithin(scene, out, 17f * (1f - ease(q)))
+            if (q > 0.5f) centreDot(out, ease((q - 0.5f) / 0.5f))
+        } else {
+            centreDot(out, 1f - (p - 0.65f) / 0.35f)
+        }
+        return mask(out)
+    }
+
+    private fun copyWithin(from: DotGrid, to: DotGrid, r: Float) {
+        for (y in 0 until SIZE) for (x in 0 until SIZE) {
+            if (hypot((x - 12).toFloat(), (y - 12).toFloat()) <= r) to.set(x, y, from.level(x, y), from.isRed(x, y))
+        }
+    }
+
+    private fun centreDot(g: DotGrid, strength: Float) {
+        val v = (255 * strength.coerceIn(0f, 1f)).roundToInt()
+        g.set(12, 12, max(g.level(12, 12), v))
+        for ((x, y) in listOf(11 to 12, 13 to 12, 12 to 11, 12 to 13)) g.set(x, y, max(g.level(x, y), v * 3 / 10))
     }
 
     /** Anything outside the real matrix shape stays dark. */
@@ -410,16 +469,20 @@ object PetScene {
 
     fun bodyHeight(state: PetState, now: Long): Int = Art.body(state.stage(now), state.form(now)).sprite.height
 
-    /** A big, simple frame for a Glyph nudge: the icon of what the pet needs, three times size. */
-    fun nudgeFrame(need: Action, on: Boolean): DotGrid {
+    /**
+     * A big, simple frame for a Glyph nudge: the icon of what the pet needs, three times size,
+     * pulsing like a heartbeat with a faint ripple. [t] is milliseconds since the nudge began.
+     */
+    fun nudgeFrame(need: Action, t: Long): DotGrid {
         val g = DotGrid(SIZE, SIZE)
-        if (!on) return g
         val icon = Art.icon(need)
+        val level = (30 + 225 * heartbeat(t)).roundToInt()
         for (y in 0 until icon.height) for (x in 0 until icon.width) {
             if (icon.at(x, y) == '#') {
-                for (dy in 0 until 3) for (dx in 0 until 3) g.set(5 + x * 3 + dx, 5 + y * 3 + dy, 255)
+                for (dy in 0 until 3) for (dx in 0 until 3) g.set(5 + x * 3 + dx, 5 + y * 3 + dy, level)
             }
         }
+        ripple(g, t, 12f, 12f, 8.5f, 4f, 0..24)
         return mask(g)
     }
 
@@ -502,28 +565,43 @@ object PetScene {
         for (x in (3 + scroll)..21 step 2) g.set(x, GROUND_Y, 40)
     }
 
-    /** Falling rain or snow, faint, behind everything. */
+    /**
+     * Falling rain or snow, behind everything. Drops and flakes come at three depths: far ones
+     * are dim and slow, near ones bright and quick. Raindrops have fading tails and splash.
+     */
     private fun drawWeather(g: DotGrid, w: WeatherNow, anim: Long, animate: Boolean) {
         val t = if (animate) anim else 0L
         when (w.sky) {
             Sky.RAIN, Sky.STORM -> {
-                val columns = if (w.sky == Sky.STORM) intArrayOf(3, 5, 7, 9, 11, 13, 15, 17, 19, 21)
-                else intArrayOf(4, 8, 12, 16, 20)
-                columns.forEachIndexed { i, x ->
-                    val y = ((t / 90 + i * 7) % 19).toInt()
-                    g.set(x, y, 60)
-                    g.set(x, y - 1, 25)
+                val drops = if (w.sky == Sky.STORM) RAIN + STORM_EXTRA else RAIN
+                for (d in drops) {
+                    val lv = RAIN_LEVEL[d.depth]
+                    val y = ((t / RAIN_STEP_MS[d.depth] + d.offset) % 23).toInt() - 2
+                    if (y < GROUND_Y) g.set(d.x, y, lv)
+                    g.set(d.x, y - 1, lv * 45 / 100)
+                    g.set(d.x, y - 2, lv * 18 / 100)
+                    if (d.depth > 0 && y == GROUND_Y) {
+                        g.set(d.x - 1, GROUND_Y - 1, lv / 2)
+                        g.set(d.x + 1, GROUND_Y - 1, lv / 2)
+                    }
                 }
             }
             Sky.SNOW -> {
-                val columns = intArrayOf(4, 9, 14, 19, 6, 17)
-                columns.forEachIndexed { i, x ->
-                    val y = ((t / 350 + i * 5) % 19).toInt()
-                    val drift = ((t / 700 + i) % 2).toInt()
-                    g.set(x + drift, y, 90)
+                for (d in SNOW) {
+                    val step = SNOW_STEP_MS[d.depth]
+                    val y = ((t / step + d.offset) % 22).toInt() - 1
+                    val sway = SWAY[((t / (step * 2) + d.offset) % SWAY.size).toInt()] * (if (d.depth == 0) 0 else 1)
+                    if (y < GROUND_Y) g.set(d.x + sway, y, SNOW_LEVEL[d.depth])
                 }
             }
             else -> {}
+        }
+    }
+
+    /** Snow lying on the ground. */
+    private fun drawSnowCover(g: DotGrid) {
+        for (x in 0 until SIZE) {
+            if (GlyphShape.contains(x, GROUND_Y + 1)) g.set(x, GROUND_Y + 1, if (x % 3 == 0) 60 else 35)
         }
     }
 
@@ -544,15 +622,54 @@ object PetScene {
         val wobble = if (animate && (nearlyHatched || poke)) intArrayOf(0, 1, 0, -1)[((anim / 200) % 4).toInt()] else 0
         val left = CENTER_X - egg.width / 2 + wobble
         val top = FEET_Y - egg.height + 1
-        g.stamp(egg, left, top)
-        if (age > PetState.EGG_MS / 2) {
-            // A crack across the middle.
-            g.carve(left + 1, top + 4)
-            g.carve(left + 2, top + 5)
-            g.carve(left + 3, top + 4)
-            g.carve(left + 4, top + 5)
-            g.carve(left + 5, top + 4)
+        // It glows from inside, pulsing faster as hatching gets closer.
+        val ready = (age.toFloat() / PetState.EGG_MS).coerceIn(0f, 1f)
+        val hz = 0.5f + 0.5f * (ready * 5).toInt().coerceIn(0, 4)
+        val glow = if (animate) 0.5f + 0.5f * sin(2.0 * Math.PI * hz * (anim % 60_000L) / 1000.0).toFloat() else 0.5f
+        for (y in 0 until egg.height) for (x in 0 until egg.width) {
+            when (egg.at(x, y)) {
+                '#' -> g.set(left + x, top + y, 170)
+                '+' -> g.set(left + x, top + y, (60 + 195 * glow * (0.35f + 0.65f * ready)).roundToInt())
+            }
         }
+        if (age > PetState.EGG_MS / 2) {
+            // A crack across the middle, with the light shining through it.
+            val light = (110 + 145 * glow).roundToInt()
+            for ((x, y) in listOf(1 to 4, 2 to 5, 3 to 4, 4 to 5, 5 to 4)) g.set(left + x, top + y, light)
+        }
+    }
+
+    /** The flash as the egg hatches. [p] is 0..1. */
+    private fun drawHatchFlash(g: DotGrid, p: Float) {
+        val fade = 1f - ease(p)
+        val reach = 5f + 16f * p
+        for (y in 0 until SIZE) for (x in 0 until SIZE) {
+            val d = hypot((x - CENTER_X).toFloat(), (y - 15).toFloat())
+            val v = (255 * fade * (1.25f - d / reach).coerceIn(0f, 1f)).roundToInt()
+            if (v > g.level(x, y)) g.set(x, y, v)
+        }
+    }
+
+    /** Faint rings rippling out from around the pet, and a flickering heart floating up behind it. */
+    private fun drawGlow(g: DotGrid, shape: DotGrid, anim: Long) {
+        val lit = ArrayList<Int>()
+        for (i in shape.levels.indices) if (shape.levels[i] > 0) lit.add(i)
+        if (lit.isEmpty()) return
+        for (y in 0 until SIZE) for (x in 0 until SIZE) {
+            if (shape.level(x, y) > 0 || g.level(x, y) > 0 || !GlyphShape.contains(x, y)) continue
+            var best = 99f
+            for (i in lit) {
+                val d = hypot((x - i % SIZE).toFloat(), (y - i / SIZE).toFloat())
+                if (d < best) best = d
+            }
+            if (best > 7f) continue
+            val wave = 0.5f + 0.5f * kotlin.math.cos(2.0 * Math.PI * (best / 2.8 - (anim % 13_000L) / 1300.0)).toFloat()
+            val v = (52 * wave * exp(-(best - 1f) / 2.3f)).roundToInt()
+            if (v > 0) g.set(x, y, v)
+        }
+        val hp = (anim % 2000L) / 2000f
+        val flickerOn = (anim / 90) % 6 != 4L
+        if (hp in 0.05f..0.95f && flickerOn) g.stamp(Art.HEART, 16 + (hp * 1.5f).toInt(), 8 - (hp * 5f).toInt(), red = true)
     }
 
     private fun drawPoops(g: DotGrid, count: Int, anim: Long, animate: Boolean) {
@@ -579,8 +696,11 @@ object PetScene {
         feetY: Int = FEET_Y,
         season: Season? = null,
         growing: Float = -1f,
+        medicine: Float = -1f,
     ) {
         val sprite = body.sprite
+        // Medicine: a bright wave runs down through it, then it's well again.
+        val wave = mood == Mood.MEDICATED && medicine in 0f..1f
         // Growing up: flickers in and out among sparkles, then settles.
         val flicker = growing in 0f..0.6f && animate && (anim / 110) % 2 == 0L
         // Waking up: first a sleepy wriggle, then a jump with wide eyes.
@@ -609,16 +729,37 @@ object PetScene {
         val level = when {
             flicker -> 60
             mood == Mood.SLEEPING || wakingWriggle -> 150
-            mood == Mood.SICK -> 120
             else -> 255
         }
-        g.stamp(sprite, left, top, level)
+        val front = if (wave) -1.5f + medicine * (sprite.height + 3) else 0f
+        if (wave && animate) {
+            // The wave's edge glows faintly across the whole matrix.
+            val bandY = top + front.roundToInt()
+            for (x in 0 until g.width) if (g.level(x, bandY) == 0) g.set(x, bandY, 45)
+        }
+        val t = if (animate) anim else 0L
+        for (y in 0 until sprite.height) for (x in 0 until sprite.width) {
+            if (sprite.at(x, y) != '#') continue
+            // Ill: a slow, blotchy shimmer instead of an even glow.
+            val ill = !flicker && (mood == Mood.SICK || (wave && y > front))
+            val base = if (ill) (120 + 50 * illShimmer(x, y, t)).roundToInt() else level
+            val shade = if (flicker) 1f else shading(sprite, x, y)
+            g.set(left + x, top + y, (base * shade).roundToInt())
+        }
+        // A little blush on the cheeks.
+        if (!flicker) {
+            for (cx in listOf(body.mouthX - 4, body.mouthX + 4)) {
+                if (sprite.at(cx, body.mouthY) == '#') {
+                    g.set(left + cx, top + body.mouthY, g.level(left + cx, top + body.mouthY) / 2)
+                }
+            }
+        }
 
         // Eyes
         val ey = top + body.eyeY
         val blink = animate && (anim % 3400) < 160
         val eyesClosed = mood == Mood.SLEEPING || mood == Mood.PLAYING || mood == Mood.SICK ||
-            mood == Mood.MEDICATED || mood == Mood.STUFFED || wakingWriggle || (blink && mood != Mood.WAKING)
+            wave || mood == Mood.STUFFED || wakingWriggle || (blink && mood != Mood.WAKING)
         val turn = look + headShake
         for (ex in listOf(left + body.eyeLeftX + turn, left + body.eyeRightX + turn)) {
             for (dx in 0 until body.eyeWidth) {
@@ -654,6 +795,7 @@ object PetScene {
         val my = top + body.mouthY
         when (mood) {
             Mood.HAPPY, Mood.PLAYING, Mood.CLEANING, Mood.WALKING, Mood.GROWING -> smile(g, mx, my)
+            Mood.MEDICATED -> if (wave) flat(g, mx, my) else smile(g, mx, my)
             Mood.WAKING -> if (wakingWriggle) flat(g, mx, my) else openMouth(g, mx, my)
             Mood.SAD, Mood.SICK, Mood.REFUSING -> frown(g, mx, my)
             Mood.STUFFED -> flat(g, mx, my)
@@ -709,9 +851,22 @@ object PetScene {
         }
 
         when (mood) {
-            Mood.PLAYING -> g.stamp(Art.HEART, iconX, iconY + 1, red = true)
+            // The heart flickers, Tamagotchi-style.
+            Mood.PLAYING -> if (!animate || (anim / 90) % 7 != 2L && (anim / 90) % 7 != 5L) {
+                g.stamp(Art.HEART, iconX, iconY + 1, red = true)
+            }
             Mood.EATING -> g.stamp(Art.FOOD, iconX, iconY, level = 120)
-            Mood.MEDICATED -> g.stamp(Art.PILL, iconX, iconY, level = 120)
+            Mood.MEDICATED -> {
+                val p = (now - state.lastActionAt).toFloat() / PetState.MEDICINE_WAVE_MS
+                if (p < 1f) {
+                    g.stamp(Art.PILL, iconX, iconY, level = (120 * (1f - p.coerceIn(0f, 1f))).roundToInt())
+                } else {
+                    // Well again: a few sparkles that fade away.
+                    val fade = (1f - (p - 1f) / 1.5f).coerceIn(0f, 1f)
+                    val rise = ((p - 1f) * 1.5f).toInt()
+                    for ((x, y) in listOf(3 to 7, 19 to 8, 17 to 3)) g.stamp(Art.SPARK, x, y - rise, level = (220 * fade).roundToInt())
+                }
+            }
             Mood.STUFFED -> g.stamp(Art.FOOD, iconX, iconY, level = 70)
             Mood.REFUSING -> g.stamp(Art.PLAY, iconX, iconY, level = 70)
             Mood.WAKING -> g.text("!", 11, iconY)
@@ -740,8 +895,10 @@ object PetScene {
             Mood.SAD, Mood.SICK -> {
                 val need = state.mostNeeded()
                 if (need != null) {
-                    val on = !animate || (anim / 600) % 2 == 0L
-                    if (on) g.stamp(Art.icon(need), iconX, iconY, red = true)
+                    // Pulses like a heartbeat (two beats, then a rest), with a faint ripple.
+                    val beat = if (animate) heartbeat(anim) else 1f
+                    g.stamp(Art.icon(need), iconX, iconY, level = (40 + 215 * beat).roundToInt(), red = true)
+                    if (animate) ripple(g, anim, iconX + 2f, iconY + 2f, 3f, 4.5f, 0..7)
                 }
             }
             else -> {}
@@ -784,5 +941,73 @@ object PetScene {
             }
             else -> {}
         }
+    }
+
+    // ---- Little helpers for the softer animations -----------------------------------------
+
+    private val GLOW_MOODS = setOf(Mood.HAPPY, Mood.OK, Mood.SAD, Mood.WALKING, Mood.EATING, Mood.PLAYING, Mood.CLEANING)
+    private const val HATCH_FLASH = 0.3f
+
+    private class Drop(val x: Int, val depth: Int, val offset: Int)
+
+    // depth 0 = far (dim, slow), 1 = middle, 2 = near (bright, quick)
+    private val RAIN = listOf(
+        Drop(3, 2, 0), Drop(6, 0, 5), Drop(8, 1, 11), Drop(11, 2, 3),
+        Drop(14, 0, 8), Drop(16, 1, 15), Drop(19, 2, 6), Drop(21, 0, 13),
+    )
+    private val STORM_EXTRA = listOf(Drop(4, 1, 9), Drop(9, 2, 17), Drop(13, 1, 2), Drop(18, 0, 19), Drop(20, 1, 4))
+    private val RAIN_LEVEL = intArrayOf(35, 70, 115)
+    private val RAIN_STEP_MS = longArrayOf(140L, 95L, 60L)
+    private val SNOW = listOf(
+        Drop(3, 0, 2), Drop(7, 0, 14), Drop(12, 0, 8), Drop(17, 0, 19), Drop(21, 0, 5),
+        Drop(5, 1, 10), Drop(10, 1, 1), Drop(15, 1, 16), Drop(20, 1, 7),
+        Drop(8, 2, 4), Drop(14, 2, 12), Drop(19, 2, 18),
+    )
+    private val SNOW_LEVEL = intArrayOf(30, 70, 140)
+    private val SNOW_STEP_MS = longArrayOf(650L, 420L, 260L)
+    private val SWAY = intArrayOf(0, 1, 1, 0, -1, -1)
+
+    private fun ease(p: Float): Float {
+        val q = p.coerceIn(0f, 1f)
+        return q * q * (3 - 2 * q)
+    }
+
+    /** 0..1: two quick beats, then a rest, every 1.8 seconds. */
+    private fun heartbeat(t: Long): Float {
+        val c = (t % 1800L).toFloat()
+        fun bump(m: Float, w: Float): Float { val d = (c - m) / w; return exp(-d * d) }
+        return (bump(150f, 130f) + 0.75f * bump(520f, 150f)).coerceIn(0f, 1f)
+    }
+
+    /** A faint ring spreading out from (cx, cy) after each heartbeat, only on unlit dots in [rows]. */
+    private fun ripple(g: DotGrid, t: Long, cx: Float, cy: Float, from: Float, spread: Float, rows: IntRange) {
+        val c = t % 1800L
+        if (c < 150L) return
+        val k = (c - 150L) / 1650f
+        val r = from + k * spread
+        for (y in rows) for (x in 0 until g.width) {
+            if (g.level(x, y) != 0 || !GlyphShape.contains(x, y)) continue
+            val near = 1f - abs(hypot(x - cx, y - cy) - r) / 0.8f
+            if (near > 0f) g.set(x, y, (40 * near * (1f - k)).roundToInt())
+        }
+    }
+
+    /** -1..1, drifting slowly across the body: how an ill pet's glow goes blotchy. */
+    private fun illShimmer(x: Int, y: Int, t: Long): Float {
+        val s = (t % 6_930_000L).toDouble()
+        return ((sin(x * 1.7 + s / 700) + sin(y * 2.3 - s / 900) + sin((x + y) * 1.1 + s / 500) +
+            sin((x - y) * 0.9 - s / 1100)) / 4).toFloat()
+    }
+
+    /** Soft shading: a little brighter towards the top left, a little dimmer at the edges, so it looks round. */
+    private fun shading(sprite: Sprite, x: Int, y: Int): Float {
+        val hx = sprite.width * 0.32f
+        val hy = sprite.height * 0.32f
+        val reach = max(sprite.width, sprite.height) * 0.82f
+        var v = 1f - 0.5f * ((hypot(x - hx, y - hy) - 1f) / reach).coerceIn(0f, 1f)
+        val edge = sprite.at(x - 1, y) != '#' || sprite.at(x + 1, y) != '#' ||
+            sprite.at(x, y - 1) != '#' || sprite.at(x, y + 1) != '#'
+        if (edge) v *= 0.75f
+        return v
     }
 }

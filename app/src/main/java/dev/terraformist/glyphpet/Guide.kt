@@ -159,8 +159,8 @@ object Guide {
         Section(
             "GLYPH NUDGES",
             "Want a gentle reminder of your Dotchi's needs? Switch on Glyph nudges below. When your " +
-                "Dotchi needs something and your phone is lying face-down, what it needs blinks on the " +
-                "Glyph Matrix for a few seconds. If it's happy, you won't see anything, and you'll never " +
+                "Dotchi needs something and your phone is lying face-down, what it needs gently pulses on " +
+                "the Glyph Matrix for a few seconds. If it's happy, you won't see anything, and you'll never " +
                 "get more than one nudge an hour.\n\nNudges stay quiet at night, at daycare, and while " +
                 "Dotchi is already showing on the back of your phone.",
         ),

@@ -14,8 +14,8 @@ import com.nothing.ketchum.GlyphMatrixManager
 
 /**
  * Glyph nudges (off unless switched on in the Guide): about every half hour, if the pet needs
- * something and the phone is lying face-down, the need's icon blinks on the Glyph Matrix for a
- * few seconds. No sound, no notification. Not at night, at daycare, or more than once an hour.
+ * something and the phone is lying face-down, the need's icon pulses on the Glyph Matrix (like a
+ * heartbeat) for a few seconds. No sound, no notification. Not at night, at daycare, or more than once an hour.
  */
 object Nudges {
 
@@ -24,6 +24,8 @@ object Nudges {
     private const val KEY = "glyphNudges"
     private const val MIN_GAP_MS = 55 * 60_000L
     private const val TAG = "GlyphPet"
+    private const val PULSE_FRAME_MS = 100L
+    private const val PULSE_FRAMES = 54 // three heartbeats of 1.8 seconds
 
     fun isOn(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, false)
@@ -68,7 +70,7 @@ object Nudges {
         }
     }
 
-    /** Blink the need's icon four times on the Glyph Matrix, then hand it back. */
+    /** Pulse the need's icon on the Glyph Matrix for three heartbeats, then hand it back. */
     private fun blink(context: Context, need: Action, done: () -> Unit) {
         val main = Handler(Looper.getMainLooper())
         val manager = GlyphMatrixManager.getInstance(context)
@@ -87,18 +89,18 @@ object Nudges {
         manager.init(object : GlyphMatrixManager.Callback {
             override fun onServiceConnected(name: ComponentName?) {
                 manager.register(Glyph.DEVICE_23112)
-                for (i in 0 until 8) {
+                for (i in 0 until PULSE_FRAMES) {
                     main.postDelayed({
                         if (finished) return@postDelayed
-                        val grid = PetScene.nudgeFrame(need, on = i % 2 == 0)
+                        val grid = PetScene.nudgeFrame(need, i * PULSE_FRAME_MS)
                         try {
                             manager.setAppMatrixFrame(IntArray(grid.levels.size) { grid.levels[it] * 4095 / 255 })
                         } catch (e: Exception) {
                             Log.w(TAG, "setAppMatrixFrame failed", e)
                         }
-                    }, i * 450L)
+                    }, i * PULSE_FRAME_MS)
                 }
-                main.postDelayed({ finish() }, 8 * 450L)
+                main.postDelayed({ finish() }, PULSE_FRAMES * PULSE_FRAME_MS)
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {}

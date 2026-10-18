@@ -32,7 +32,12 @@ object DotPainter {
                 val level = grid.level(x, y)
                 val color = when {
                     level <= 0 -> if (ghosts) GHOST else continue
-                    grid.isRed(x, y) -> RED
+                    // Red dims towards the ghost grey too, so red things can fade and pulse.
+                    grid.isRed(x, y) -> if (level >= 255) RED else Color.rgb(
+                        0x1F + (0xD7 - 0x1F) * level / 255,
+                        0x1F + (0x19 - 0x1F) * level / 255,
+                        0x1F + (0x21 - 0x1F) * level / 255,
+                    )
                     else -> {
                         // Blend from the ghost grey up to white by brightness.
                         val v = 0x1F + ((0xFF - 0x1F) * level / 255)
