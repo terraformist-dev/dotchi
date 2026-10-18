@@ -38,6 +38,12 @@ object Guide {
                 "keepsakes) and MEET (visit a friend’s pet).",
         ),
         Section(
+            "TAPPING DOTCHI",
+            "Tap your Dotchi in the app to say hello. Give it a few quick taps to tickle it, or hold " +
+                "your finger on it for a snuggle.\n\nTry tapping it when it's asleep, ill, or still an " +
+                "egg too. It's just for fun, so it won't change how it's feeling.",
+        ),
+        Section(
             "READING THE SIGNS",
             "The dots under each button show how it’s doing. The more dots the better.\n\nIf it's " +
                 "red, it needs something now.",

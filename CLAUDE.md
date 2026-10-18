@@ -82,4 +82,8 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   Glyph Toy opens out from a centre dot when picked (`powerOn`). A switch-off animation was tried in build 17
   and removed in build 18 at the owner's request (it disrupted cycling through Glyph Toys): don't re-add it.
   The play heart flickers. Dotchi's and the egg's own movements are unchanged on purpose.
+- Touching Dotchi in the app (build 20, cosmetic only, never changes needs): `MainActivity` touch listener ->
+  `PetScene.render(touch = Touch(kind, elapsed, lean))`. One tap BOOP (wide eyes, "!", hop); 3 taps in 1s
+  TICKLE; hold 450ms SNUGGLE (lean to finger side, eyes closed, flickering heart); asleep STIR (one Z, stays
+  asleep); ill WEAK_SMILE; egg: 3 quick taps KNOCK (two jolts from inside, "KNOCK KNOCK!").
 - Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). An over-play cooldown (played out, head shake) was removed in build 18 at the owner's request: it got in the way when shakes happen naturally while carrying the phone. Don't re-add it.

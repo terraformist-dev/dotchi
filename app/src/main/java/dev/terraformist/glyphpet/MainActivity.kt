@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.text.InputFilter
 import android.text.InputType
+import android.view.MotionEvent
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -35,6 +36,15 @@ class MainActivity : Activity() {
     private var shownTitle: String? = null
     private var pokedAt = 0L
     private var namePromptOpen = false
+
+    // Touching Dotchi (just for fun, nothing about its needs changes).
+    private var touchKind: TouchKind? = null
+    private var touchStart = 0L
+    private var touchUntil = 0L
+    private var holding = false
+    private var leanDir = 0
+    private val tapTimes = ArrayDeque<Long>()
+    private val holdCheck = Runnable { onPetHeld() }
 
     // Shake the phone: wakes it if it's asleep, otherwise a quick play.
     // The light sensor and step counter are read here too.
@@ -64,6 +74,33 @@ class MainActivity : Activity() {
 
         // Tap the name to rename the pet.
         titleView.setOnClickListener { askForName() }
+
+        // Tap, tickle or hold Dotchi.
+        petView.setOnTouchListener { v, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    leanDir = if (e.x < v.width / 2f) -1 else 1
+                    handler.postDelayed(holdCheck, HOLD_MS)
+                }
+                MotionEvent.ACTION_MOVE -> leanDir = if (e.x < v.width / 2f) -1 else 1
+                MotionEvent.ACTION_UP -> {
+                    handler.removeCallbacks(holdCheck)
+                    if (holding) {
+                        holding = false
+                        if (touchKind == TouchKind.SNUGGLE) touchUntil = System.currentTimeMillis()
+                    } else {
+                        v.performClick()
+                        onPetTapped()
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    handler.removeCallbacks(holdCheck)
+                    if (holding && touchKind == TouchKind.SNUGGLE) touchUntil = System.currentTimeMillis()
+                    holding = false
+                }
+            }
+            true
+        }
 
         // Each button does whatever action is in that slot right now
         // (the middle one is Play, or Medicine while the pet is ill).
@@ -235,6 +272,62 @@ class MainActivity : Activity() {
         Weather.refreshIfStale(this) { render() }
     }
 
+    // ---- Touching Dotchi -----------------------------------------------------------------
+
+    private fun startTouch(kind: TouchKind, now: Long, lasts: Long) {
+        if (touchKind != kind || now >= touchUntil) touchStart = now
+        touchKind = kind
+        touchUntil = now + lasts
+    }
+
+    private fun currentTouch(now: Long): Touch? {
+        val kind = touchKind ?: return null
+        return if (now < touchUntil) Touch(kind, now - touchStart, leanDir) else null
+    }
+
+    /** Can it react to a touch right now? Not during growing up, goodbyes, waking or medicine. */
+    private fun canReact(state: PetState, now: Long): Boolean =
+        !state.isFarewell(now) && state.mood(now) !in setOf(Mood.GROWING, Mood.WAKING, Mood.MEDICATED)
+
+    private fun onPetTapped() {
+        val now = System.currentTimeMillis()
+        val state = PetStore.get(this, now)
+        tapTimes.addLast(now)
+        while (tapTimes.isNotEmpty() && now - tapTimes.first() > TICKLE_WINDOW_MS) tapTimes.removeFirst()
+        if (state.stage(now) == Stage.EGG) {
+            pokedAt = now
+            // A few taps and something knocks back.
+            val alreadyKnocking = touchKind == TouchKind.KNOCK && now < touchUntil
+            if (tapTimes.size >= 3 && !alreadyKnocking) {
+                startTouch(TouchKind.KNOCK, now, 1_300L)
+                tapTimes.clear()
+            }
+            render()
+            return
+        }
+        if (!canReact(state, now)) return
+        when (state.mood(now)) {
+            Mood.SLEEPING -> startTouch(TouchKind.STIR, now, 1_000L)
+            Mood.SICK -> startTouch(TouchKind.WEAK_SMILE, now, 1_400L)
+            else -> if (tapTimes.size >= 3) startTouch(TouchKind.TICKLE, now, 1_200L) else startTouch(TouchKind.BOOP, now, 800L)
+        }
+        render()
+    }
+
+    private fun onPetHeld() {
+        val now = System.currentTimeMillis()
+        val state = PetStore.get(this, now)
+        if (state.stage(now) == Stage.EGG || !canReact(state, now)) return
+        holding = true
+        tapTimes.clear()
+        when (state.mood(now)) {
+            Mood.SLEEPING -> startTouch(TouchKind.STIR, now, 1_000L)
+            Mood.SICK -> startTouch(TouchKind.WEAK_SMILE, now, 1_400L)
+            else -> startTouch(TouchKind.SNUGGLE, now, Long.MAX_VALUE / 2)
+        }
+        render()
+    }
+
     // ---- Buttons and drawing ------------------------------------------------------------
 
     private fun onSlot(slot: Int) {
@@ -267,6 +360,9 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         handler.removeCallbacks(loop)
+        handler.removeCallbacks(holdCheck)
+        holding = false
+        touchKind = null
         sensors.stop()
         super.onPause()
     }
@@ -277,7 +373,10 @@ class MainActivity : Activity() {
         val weather = Weather.current(this, now)
         val poked = now - pokedAt < POKE_MS
         petView.setImageBitmap(
-            DotPainter.paintPet(PetScene.render(state, now, animate = true, weather = weather, poke = poked), pitch = 24)
+            DotPainter.paintPet(
+                PetScene.render(state, now, animate = true, weather = weather, poke = poked, touch = currentTouch(now)),
+                pitch = 24,
+            )
         )
 
         // The name (or "DOTCHI" until it has one), written in dots. Only redrawn when it changes.
@@ -293,7 +392,8 @@ class MainActivity : Activity() {
             view.contentDescription = PetWidgetProvider.label(action)
         }
 
-        statusView.text = if (poked) "STILL AN EGG. NOT LONG NOW!" else statusLine(state, now) + extrasLine(state, now, weather)
+        val knocking = touchKind == TouchKind.KNOCK && now < touchUntil
+        statusView.text = if (knocking) "KNOCK KNOCK!" else if (poked) "STILL AN EGG. NOT LONG NOW!" else statusLine(state, now) + extrasLine(state, now, weather)
         daycareView.text = daycareLine(state, now)
 
         maybeAskForName(state, now)
@@ -330,6 +430,8 @@ class MainActivity : Activity() {
         private const val PERMISSIONS_REQUEST = 1
         private const val MAX_NAME = 8
         private const val POKE_MS = 1_500L
+        private const val HOLD_MS = 450L
+        private const val TICKLE_WINDOW_MS = 1_000L
         private val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
         /** A heading written in the dot font. */

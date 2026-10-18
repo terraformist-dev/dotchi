@@ -22,6 +22,19 @@ private class Body(
     val headY: Int = 0, // first full row of the head (hats sit on it)
 )
 
+/** How Dotchi reacts to being touched in the app. Just for fun: nothing about its needs changes. */
+enum class TouchKind {
+    BOOP,       // one tap: wide eyes, a little "!" and a hop
+    TICKLE,     // quick taps: giggles and wriggles
+    SNUGGLE,    // finger held on it: leans in, eyes closed, a heart floats up
+    STIR,       // tapped while asleep: stirs and puffs out a Z, but stays asleep
+    WEAK_SMILE, // tapped while ill: a weak little smile
+    KNOCK,      // the egg, after a few taps: something knocks back from inside
+}
+
+/** A touch reaction in progress: what kind, how long ago it started, and which way to lean (-1 left, 1 right). */
+class Touch(val kind: TouchKind, val elapsed: Long, val lean: Int = 0)
+
 private object Art {
     val EGG = Sprite(
         "..###..",
@@ -328,6 +341,7 @@ object PetScene {
         weather: WeatherNow? = null,
         season: Season? = Season.on(now),
         poke: Boolean = false,
+        touch: Touch? = null,
     ): DotGrid {
         if (state.isFarewell(now)) return mask(renderFarewell(state, now, anim, season))
         val g = DotGrid(SIZE, SIZE)
@@ -343,7 +357,7 @@ object PetScene {
         if (weather != null) drawWeather(g, weather, anim, animate)
 
         if (stage == Stage.EGG) {
-            drawEgg(g, state, now, anim, animate, poke)
+            drawEgg(g, state, now, anim, animate, poke, if (touch?.kind == TouchKind.KNOCK) touch.elapsed else -1L)
         } else {
             drawPoops(g, state.poops, anim, animate)
             val waking = if (mood == Mood.WAKING) (now - state.wokenAt).toFloat() / PetState.WAKING_ANIM_MS else -1f
@@ -359,7 +373,7 @@ object PetScene {
             }
             drawPet(
                 g, body, mood, anim, animate, look, greeting, waking,
-                season = season, growing = growing, medicine = medicine,
+                season = season, growing = growing, medicine = medicine, touch = touch,
             )
             // Hatching: the egg bursts into light, which fades out from the middle.
             if (stage == Stage.BABY && growing in 0f..HATCH_FLASH) drawHatchFlash(g, growing / HATCH_FLASH)
@@ -376,7 +390,7 @@ object PetScene {
                 g.text(topText, x, 1)
             }
             hud -> {
-                drawTop(g, state, mood, anim, animate, selected, selectProgress, now)
+                drawTop(g, state, mood, anim, animate, selected, selectProgress, now, touch)
                 if (selected == null) {
                     if (weather != null) drawSkyIcon(g, weather)
                     if (season != null && stage != Stage.EGG) drawSeasonExtras(g, season, anim, animate)
@@ -602,13 +616,15 @@ object PetScene {
         g.stamp(icon, 4, 4, level = 90)
     }
 
-    private fun drawEgg(g: DotGrid, state: PetState, now: Long, anim: Long, animate: Boolean, poke: Boolean) {
+    private fun drawEgg(g: DotGrid, state: PetState, now: Long, anim: Long, animate: Boolean, poke: Boolean, knock: Long = -1L) {
         val egg = Art.EGG
         val age = now - state.bornAt
         val nearlyHatched = age > PetState.EGG_MS * 6 / 10
         val wobble = if (animate && (nearlyHatched || poke)) intArrayOf(0, 1, 0, -1)[((anim / 200) % 4).toInt()] else 0
+        // Knock knock: tapped a few times, something inside knocks back twice.
+        val knocking = knock in 450L until 600L || knock in 850L until 1000L
         val left = CENTER_X - egg.width / 2 + wobble
-        val top = FEET_Y - egg.height + 1
+        val top = FEET_Y - egg.height + 1 - (if (knocking) 1 else 0)
         // It glows from inside, pulsing faster as hatching gets closer.
         val ready = (age.toFloat() / PetState.EGG_MS).coerceIn(0f, 1f)
         val hz = 0.5f + 0.5f * (ready * 5).toInt().coerceIn(0, 4)
@@ -616,7 +632,7 @@ object PetScene {
         for (y in 0 until egg.height) for (x in 0 until egg.width) {
             when (egg.at(x, y)) {
                 '#' -> g.set(left + x, top + y, 170)
-                '+' -> g.set(left + x, top + y, (60 + 195 * glow * (0.35f + 0.65f * ready)).roundToInt())
+                '+' -> g.set(left + x, top + y, if (knocking) 255 else (60 + 195 * glow * (0.35f + 0.65f * ready)).roundToInt())
             }
         }
         if (age > PetState.EGG_MS / 2) {
@@ -684,8 +700,11 @@ object PetScene {
         season: Season? = null,
         growing: Float = -1f,
         medicine: Float = -1f,
+        touch: Touch? = null,
     ) {
         val sprite = body.sprite
+        val tk = touch?.kind
+        val te = touch?.elapsed ?: 0L
         // Medicine: a bright wave runs down through it, then it's well again.
         val wave = mood == Mood.MEDICATED && medicine in 0f..1f
         // Growing up: flickers in and out among sparkles, then settles.
@@ -694,7 +713,13 @@ object PetScene {
         val wakingWriggle = waking in 0f..0.3f
         val wakingJump = waking > 0.3f
 
-        val lift = if (!animate) 0 else when (mood) {
+        val lift = if (!animate) 0 else if (tk == TouchKind.BOOP) {
+            intArrayOf(1, 2, 3, 3, 2, 1, 0, 0)[(te / 90).toInt().coerceIn(0, 7)]
+        } else if (tk == TouchKind.TICKLE) {
+            ((te / 120) % 2).toInt()
+        } else if (tk == TouchKind.SNUGGLE) {
+            0
+        } else when (mood) {
             Mood.PLAYING -> if ((anim / 180) % 2 == 0L) 2 else 0
             Mood.HAPPY, Mood.OK, Mood.CLEANING -> ((anim / 500) % 2).toInt()
             Mood.EATING -> ((anim / 250) % 2).toInt()
@@ -709,7 +734,14 @@ object PetScene {
         // Playing: dash from side to side as well as hopping.
         val dash = if (animate && mood == Mood.PLAYING) intArrayOf(0, 2, 3, 2, 0, -2, -3, -2)[((anim / 150) % 8).toInt()] else 0
         val wriggle = if (animate && wakingWriggle) (if ((anim / 90) % 2 == 0L) -1 else 1) else 0
-        val left = centerX - sprite.width / 2 + shiver + dash + wriggle
+        // Touch: giggly wriggle, leaning into a held finger, or a sleepy stir.
+        val nudge = when (tk) {
+            TouchKind.TICKLE -> if ((te / 90) % 2 == 0L) -1 else 1
+            TouchKind.SNUGGLE -> touch?.lean ?: 0
+            TouchKind.STIR -> if (te in 150L until 450L) 1 else 0
+            else -> 0
+        }
+        val left = centerX - sprite.width / 2 + shiver + (if (tk == TouchKind.TICKLE || tk == TouchKind.SNUGGLE) 0 else dash) + wriggle + nudge
         val top = feetY - sprite.height + 1 - lift
         val level = when {
             flicker -> 60
@@ -743,8 +775,11 @@ object PetScene {
         // Eyes
         val ey = top + body.eyeY
         val blink = animate && (anim % 3400) < 160
-        val eyesClosed = mood == Mood.SLEEPING || mood == Mood.PLAYING || mood == Mood.SICK ||
-            wave || mood == Mood.STUFFED || wakingWriggle || (blink && mood != Mood.WAKING)
+        // Booped: eyes go wide for a moment.
+        val wideEyes = tk == TouchKind.BOOP && te < 500L
+        val eyesClosed = !wideEyes && (mood == Mood.SLEEPING || mood == Mood.PLAYING || mood == Mood.SICK ||
+            wave || mood == Mood.STUFFED || wakingWriggle || (blink && mood != Mood.WAKING) ||
+            tk == TouchKind.TICKLE || tk == TouchKind.SNUGGLE || tk == TouchKind.STIR)
         val turn = look
         for (ex in listOf(left + body.eyeLeftX + turn, left + body.eyeRightX + turn)) {
             for (dx in 0 until body.eyeWidth) {
@@ -753,6 +788,7 @@ object PetScene {
                 } else {
                     g.carve(ex + dx, ey)
                     g.carve(ex + dx, ey + 1)
+                    if (wideEyes) g.carve(ex + dx, ey - 1)
                 }
             }
         }
@@ -778,6 +814,18 @@ object PetScene {
         // Mouth
         val mx = left + body.mouthX + turn
         val my = top + body.mouthY
+        when {
+            tk == TouchKind.BOOP -> if (te < 450L) openMouth(g, mx, my) else smile(g, mx, my)
+            tk == TouchKind.TICKLE -> if ((te / 180) % 2 == 0L) openMouth(g, mx, my) else smile(g, mx, my)
+            tk == TouchKind.SNUGGLE || tk == TouchKind.WEAK_SMILE -> smile(g, mx, my)
+            tk == TouchKind.STIR -> g.carve(mx, my + 1)
+            else -> drawMouth(g, mood, mx, my, wave, wakingWriggle, animate, anim)
+        }
+    }
+
+    private fun drawMouth(
+        g: DotGrid, mood: Mood, mx: Int, my: Int, wave: Boolean, wakingWriggle: Boolean, animate: Boolean, anim: Long,
+    ) {
         when (mood) {
             Mood.HAPPY, Mood.PLAYING, Mood.CLEANING, Mood.WALKING, Mood.GROWING -> smile(g, mx, my)
             Mood.MEDICATED -> if (wave) flat(g, mx, my) else smile(g, mx, my)
@@ -818,9 +866,33 @@ object PetScene {
         selected: Action?,
         selectProgress: Float,
         now: Long,
+        touch: Touch? = null,
     ) {
         val iconX = 10
         val iconY = 1
+
+        // Touch reactions take over the space above it for a moment.
+        if (selected == null && touch != null && animate) {
+            val te = touch.elapsed
+            when (touch.kind) {
+                TouchKind.BOOP -> if (te < 800L) {
+                    g.text("!", 11, iconY)
+                    return
+                }
+                TouchKind.SNUGGLE -> {
+                    // A heart floats up, flickering, every 1.6 seconds.
+                    val hp = (te % 1600L) / 1600f
+                    if ((anim / 90) % 6 != 4L) g.stamp(Art.HEART, iconX, iconY + 4 - (hp * 4).toInt(), red = true)
+                    return
+                }
+                TouchKind.STIR -> if (te < 1000L) {
+                    // One sleepy Z puffs out and drifts up, fading.
+                    val p = te / 1000f
+                    g.stamp(Art.ZED, 11, 6 - (p * 5).toInt(), level = (200 * (1f - p)).roundToInt())
+                }
+                else -> {}
+            }
+        }
 
         // At daycare: a little house in the corner.
         if (selected == null && state.isAtDaycare(now) && mood != Mood.SLEEPING) {
