@@ -80,12 +80,6 @@ class GlyphPetToyService : Service() {
     /** When the matrix was switched on (it opens out from a dot, like an old TV). */
     private var poweredOnAt = 0L
 
-    /** The last picture sent, so switching off can shrink it away. */
-    private var lastFrame: DotGrid? = null
-
-    /** Counts each time the toy is picked, so a goodbye from an earlier time can't switch off a new one. */
-    @Volatile private var session = 0
-
     private val sensors by lazy {
         PetSensors(applicationContext, onShake = { onShake() }, onFlippedFaceDown = { sayHello() })
     }
@@ -183,7 +177,6 @@ class GlyphPetToyService : Service() {
     private var receiverRegistered = false
 
     override fun onBind(intent: Intent?): IBinder {
-        session++
         val manager = GlyphMatrixManager.getInstance(applicationContext)
         matrix = manager
         manager.init(object : GlyphMatrixManager.Callback {
@@ -225,50 +218,19 @@ class GlyphPetToyService : Service() {
             unregisterReceiver(systemEvents)
             receiverRegistered = false
         }
-        val wasConnected = connected
         connected = false
         active = false
         selected = null
         game = null
-        val manager = matrix
-        val picture = lastFrame
-        matrix = null
-        lastFrame = null
-        if (manager != null) {
-            val mine = session
-            // Goodbye: shrink into a glowing dot, then switch off. Done off the main thread so
-            // nothing waits on it.
-            Thread {
-                if (wasConnected && picture != null) {
-                    for (i in 0..POWER_OFF_FRAMES) {
-                        if (session != mine) return@Thread // picked again meanwhile: leave it be
-                        val grid = PetScene.powerOff(picture, i.toFloat() / POWER_OFF_FRAMES)
-                        try {
-                            manager.setMatrixFrame(IntArray(grid.levels.size) { grid.levels[it] * 4095 / 255 })
-                        } catch (e: Exception) {
-                            Log.w(TAG, "setMatrixFrame failed", e)
-                            break
-                        }
-                        try {
-                            Thread.sleep(POWER_FRAME_MS)
-                        } catch (e: InterruptedException) {
-                            break
-                        }
-                    }
-                }
-                if (session != mine) return@Thread
-                try {
-                    manager.turnOff()
-                } catch (e: Exception) {
-                    Log.w(TAG, "turnOff failed", e)
-                }
-                try {
-                    manager.unInit()
-                } catch (e: Exception) {
-                    Log.w(TAG, "unInit failed", e)
-                }
-            }.start()
+        matrix?.let {
+            try {
+                it.turnOff()
+            } catch (e: Exception) {
+                Log.w(TAG, "turnOff failed", e)
+            }
+            it.unInit()
         }
+        matrix = null
         return false
     }
 
@@ -381,7 +343,7 @@ class GlyphPetToyService : Service() {
         if (now - selectedAt >= CONFIRM_AFTER_MS) {
             selected = null
             val state = PetStore.get(applicationContext, now)
-            if (action == Action.PLAY && !state.sick && state.stage(now) != Stage.EGG && !state.isPlayedOut(now)) {
+            if (action == Action.PLAY && !state.sick && state.stage(now) != Stage.EGG) {
                 // Play on the Glyph Matrix: a tilt game, taking turns between Catch and Roll.
                 game = if (nextGameIsCatch) CatchGame(now) else RollGame(now)
                 nextGameIsCatch = !nextGameIsCatch
@@ -466,7 +428,6 @@ class GlyphPetToyService : Service() {
             weather = Weather.current(applicationContext, now),
             poke = now - pokedAt < POKE_MS,
         )
-        lastFrame = scene
         val sincePowerOn = now - poweredOnAt
         val grid = if (sincePowerOn in 0L until POWER_ON_MS) {
             PetScene.powerOn(scene, sincePowerOn.toFloat() / POWER_ON_MS)
@@ -498,8 +459,6 @@ class GlyphPetToyService : Service() {
         private const val AOD_BURST_MS = 4_000L
         private const val HELLO_MS = 2_500L
         private const val POWER_ON_MS = 900L
-        private const val POWER_FRAME_MS = 80L
-        private const val POWER_OFF_FRAMES = 14
         private const val CHARGER_SHOW_MS = 6_000L
         private const val LIGHT_CHECK_EVERY_MS = 2 * 60_000L
         private const val LIGHT_LOOK_MS = 1_500L

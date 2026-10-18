@@ -50,13 +50,10 @@ object Guide {
         ),
         Section(
             "TOO MUCH OF A GOOD THING",
-            "Dotchi loves its food and its games, but it doesn't always know when to stop.\n\nIf you " +
+            "Dotchi loves its food, but it doesn't always know when to stop.\n\nIf you " +
                 "keep feeding it when its tummy is already full (all five dots lit up), it'll still eat, " +
                 "but it won't feel great afterwards. Expect a bit of a tummy ache, and a bigger mess to " +
-                "clean up not long after.\n\nPlay is the same. After lots of games in a short space of " +
-                "time, Dotchi gets played out and needs a rest. While it's resting, the PLAY button looks " +
-                "faded, and if you try to play anyway it'll just shake its head. Give it 45 minutes or so " +
-                "and it'll be ready for more.",
+                "clean up not long after.",
         ),
         Section(
             "SLEEP AND NAPS",
@@ -71,8 +68,7 @@ object Guide {
         Section(
             "SHAKING",
             "Give your phone a good shake (three firm shakes in about a second).\n\nIf your Dotchi is " +
-                "awake, it enjoys a quick game of chase (unless it's played out, in which case it shakes " +
-                "its head).\n\nIf it’s asleep or napping, a shake wakes it up instead. If it's taking a " +
+                "awake, it enjoys a quick game of chase.\n\nIf it’s asleep or napping, a shake wakes it up instead. If it's taking a " +
                 "charger nap, it stays awake for about 15 minutes before snuggling back up to the charge.",
         ),
         Section(

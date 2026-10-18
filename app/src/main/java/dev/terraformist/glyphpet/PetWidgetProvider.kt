@@ -172,10 +172,7 @@ class PetWidgetProvider : AppWidgetProvider() {
             if (action == Action.MEDICINE) {
                 buttonBitmap(label(action), 5, highlight = true, alarm = true)
             } else {
-                buttonBitmap(
-                    label(action), state.level(action), highlight = state.mostNeeded() == action,
-                    faded = action == Action.PLAY && state.isPlayedOut(System.currentTimeMillis()),
-                )
+                buttonBitmap(label(action), state.level(action), highlight = state.mostNeeded() == action)
             }
 
         /**

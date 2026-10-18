@@ -6,7 +6,6 @@ object Status {
     fun moodWord(state: PetState, now: Long): String = when (state.mood(now)) {
         Mood.EGG -> "EGG"
         Mood.STUFFED -> "STUFFED"
-        Mood.REFUSING -> "PLAYED OUT"
         Mood.GROWING -> "GROWING UP"
         Mood.SICK -> "ILL"
         Mood.SLEEPING -> if (state.isAtDaycare(now)) "NAPPING AT DAYCARE" else when (state.nap) {

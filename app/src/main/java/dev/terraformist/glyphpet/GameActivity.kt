@@ -59,10 +59,6 @@ class GameActivity : Activity() {
         val reason = when {
             state.stage(now) == Stage.EGG -> "Wait for the egg to hatch first."
             state.sick -> "Dotchi is ill. Give it medicine first."
-            state.isPlayedOut(now) -> {
-                PetStore.refusePlay(this, now)
-                "Dotchi has had enough play for now. Try again a bit later."
-            }
             else -> null
         }
         if (reason != null) {
@@ -132,9 +128,6 @@ class GameActivity : Activity() {
         if (waiting) return
         val g = game
         when {
-            finished && first && PetStore.get(this).isPlayedOut(System.currentTimeMillis()) -> {
-                infoView.text = "DOTCHI HAS HAD ENOUGH PLAY FOR NOW"
-            }
             finished -> if (first) start(g ?: Game.LEFT_RIGHT) else finish()
             g == null -> start(if (first) Game.LEFT_RIGHT else Game.HIGH_LOW)
             else -> guess(g, first)

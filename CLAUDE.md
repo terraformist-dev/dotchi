@@ -79,6 +79,7 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   now dim (`DotPainter`). Ill = blotchy shimmer (`illShimmer`); medicine = bright wave down the body
   (`MEDICINE_WAVE_MS`) then sparkles. `glowAt` (good feed, game win, friend) -> rings + flickering heart
   for `GLOW_MS` after the reaction. Egg speckles/crack glow faster as it nears hatching; hatching flashes.
-  Glyph Toy opens out from a centre dot when picked and shrinks into one when unpicked (`powerOn/powerOff`).
+  Glyph Toy opens out from a centre dot when picked (`powerOn`). A switch-off animation was tried in build 17
+  and removed in build 18 at the owner's request (it disrupted cycling through Glyph Toys): don't re-add it.
   The play heart flickers. Dotchi's and the egg's own movements are unchanged on purpose.
-- Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). 5 plays within 30 min -> played out for 45 min (`playedOutUntil`): play attempts are refused with a head shake (REFUSING), PLAY label faded.
+- Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). An over-play cooldown (played out, head shake) was removed in build 18 at the owner's request: it got in the way when shakes happen naturally while carrying the phone. Don't re-add it.

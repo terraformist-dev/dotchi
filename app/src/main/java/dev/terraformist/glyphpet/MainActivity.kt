@@ -247,10 +247,7 @@ class MainActivity : Activity() {
             return
         }
         val action = state.actions()[slot]
-        if (action == Action.PLAY && state.isPlayedOut(now)) {
-            PetStore.refusePlay(this, now)
-            render()
-        } else if (action == Action.PLAY) {
+        if (action == Action.PLAY) {
             startActivity(Intent(this, GameActivity::class.java))
         } else {
             PetStore.act(this, action)
@@ -326,10 +323,6 @@ class MainActivity : Activity() {
             return "EGG  ·  HATCHING IN ${left / 60}:${"%02d".format(left % 60)}"
         }
         val mood = Status.moodWord(state, now)
-        if (state.mood(now) == Mood.REFUSING) {
-            val mins = ((state.playedOutUntil - now) / 60_000L + 1).coerceAtLeast(1L)
-            return "${state.name(now)}  ·  PLAYED OUT  ·  TRY AGAIN IN $mins MIN"
-        }
         return "${state.name(now)}  ·  DAY ${state.day(now)}  ·  $mood"
     }
 
