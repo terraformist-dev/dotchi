@@ -77,7 +77,7 @@ data class PetState(
     // Too much of a good thing:
     val overfedAt: Long = 0L,     // last time it was fed while already full
     val extraMess: Int = 0,       // extra mess its upset tummy will add next time it goes
-    val glowAt: Long = 0L,        // last good feed, game win or friend: a happy glow follows
+    val glowAt: Long = 0L,        // last feed while hungry, game win or friend: a happy glow follows
 ) {
 
     fun stage(now: Long): Stage {
@@ -423,7 +423,8 @@ data class PetState(
                 nextPoopAt = minOf(nextPoopAt, now + 90 * MINUTE_MS),
                 lastAction = action,
                 lastActionAt = now,
-                glowAt = now,
+                // Only a proper meal when it was really hungry earns the happy glow, not a top-up.
+                glowAt = if (food < LOW) now else glowAt,
             )
             Action.PLAY -> played(won = true, now = now, boost = 30f)
             Action.CLEAN -> copy(

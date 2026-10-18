@@ -77,7 +77,7 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   half-bright cheeks at mouthX±4. Rain/snow at three depths, rain tails + splashes, snow lying on row 21.
   Need icons and Glyph nudges pulse like a heartbeat (`heartbeat`, 1.8s) with a faint ripple; red dots can
   now dim (`DotPainter`). Ill = blotchy shimmer (`illShimmer`); medicine = bright wave down the body
-  (`MEDICINE_WAVE_MS`) then sparkles. `glowAt` (good feed, game win, friend) -> rings + flickering heart
+  (`MEDICINE_WAVE_MS`) then sparkles. `glowAt` (feed only while hungry, i.e. food < LOW; game win; friend) -> rings + flickering heart
   for `GLOW_MS` after the reaction. Egg speckles/crack glow faster as it nears hatching; hatching flashes.
   Glyph Toy opens out from a centre dot when picked (`powerOn`). A switch-off animation was tried in build 17
   and removed in build 18 at the owner's request (it disrupted cycling through Glyph Toys): don't re-add it.
