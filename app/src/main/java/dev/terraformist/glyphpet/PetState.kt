@@ -210,10 +210,11 @@ data class PetState(
         val after = before + steps
         if (stage(now) == Stage.EGG) return copy(stepsToday = after, stepsDay = today)
         val thousands = after / 1000 - before / 1000
-        var joy = joy + JOY_PER_1000_STEPS * thousands
+        // Walking makes it hungrier as you go, but only the daily goal cheers it up
+        // (so walks don't stand in for playing with it).
         val food = food - FOOD_PER_1000_STEPS * thousands
         val goal = before < STEP_GOAL && after >= STEP_GOAL
-        if (goal) joy += STEP_GOAL_JOY
+        val joy = if (goal) joy + STEP_GOAL_JOY else joy
         return copy(
             stepsToday = after,
             stepsDay = today,
@@ -491,7 +492,6 @@ data class PetState(
         const val WOKEN_AWAKE_MS = 15 * MINUTE_MS
         const val WAKING_ANIM_MS = 2_600L
 
-        const val JOY_PER_1000_STEPS = 6f
         const val FOOD_PER_1000_STEPS = 3f
         const val STEP_GOAL = 5_000
         const val STEP_GOAL_JOY = 15f

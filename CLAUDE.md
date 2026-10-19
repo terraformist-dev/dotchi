@@ -86,4 +86,6 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   `PetScene.render(touch = Touch(kind, elapsed, lean))`. One tap BOOP (wide eyes, "!", hop); 3 taps in 1s
   TICKLE; hold 450ms SNUGGLE (lean to finger side, eyes closed, flickering heart); asleep STIR (one Z, stays
   asleep); ill WEAK_SMILE; egg: 3 quick taps KNOCK (two jolts from inside, "KNOCK KNOCK!").
+- Walks (build 21): every 1,000 steps only makes it hungrier (`FOOD_PER_1000_STEPS`); happiness comes only
+  from the 5,000-step daily goal (`STEP_GOAL_JOY`). Owner's choice: walking shouldn't replace playing.
 - Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). An over-play cooldown (played out, head shake) was removed in build 18 at the owner's request: it got in the way when shakes happen naturally while carrying the phone. Don't re-add it.

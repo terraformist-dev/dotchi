@@ -85,8 +85,8 @@ object Guide {
         ),
         Section(
             "WALKS",
-            "Your Dotchi comes with you on walks. Every 1,000 steps cheers it up a little and makes " +
-                "it a bit hungry, so keep an eye on FEED.\n\nWalk 5,000 steps in a day for a big boost of " +
+            "Your Dotchi comes with you on walks. Every 1,000 steps makes it a bit hungry, so keep " +
+                "an eye on FEED.\n\nWalk 5,000 steps in a day for a big boost of " +
                 "happiness.\n\nThe app asks for permission the first time you open it. If you said no, " +
                 "you can turn on physical activity for Dotchi in your phone’s settings, under Apps.",
         ),
