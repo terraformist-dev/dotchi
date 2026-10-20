@@ -25,14 +25,18 @@ import kotlin.random.Random
  * Bluetooth and listens for others. When another pet is close by (about arm's length), the
  * two appear side by side. The first meeting with each friend each day cheers your pet up.
  *
- * Only a tiny anonymous message is shared: "this is a Dotchi", which kind it is, and a
- * random number that tells friends apart. No names, accounts or location.
+ * Only a tiny message is shared: "this is a Dotchi", which kind it is, a random number that
+ * tells friends apart, and the pet's name if it has one. No accounts or location.
+ *
+ * The name (up to 8 letters) goes after the original 8 bytes, so older versions of the app,
+ * which only read the first 8, still recognise newer ones.
  */
 class MeetActivity : Activity() {
 
     private val handler = Handler(Looper.getMainLooper())
 
     private lateinit var petView: ImageView
+    private val petDots by lazy { LiveDots(petView, pitch = 20, matrixShape = false) }
     private lateinit var infoView: TextView
     private lateinit var friendsView: TextView
 
@@ -69,7 +73,8 @@ class MeetActivity : Activity() {
                 ((data[6].toInt() and 0xFF) shl 8) or (data[7].toInt() and 0xFF)
             if (id == Friends.myId(this@MeetActivity)) return
             if (result.rssi < CLOSE_RSSI) return // too far away: hold the phones closer
-            handler.post { onFriendNearby(id, data[3].toInt()) }
+            val name = cleanName(String(data, PAYLOAD_SIZE, data.size - PAYLOAD_SIZE, Charsets.US_ASCII))
+            handler.post { onFriendNearby(id, data[3].toInt(), name) }
         }
 
         override fun onScanFailed(errorCode: Int) {
@@ -148,7 +153,7 @@ class MeetActivity : Activity() {
             val payload = byteArrayOf(
                 MAGIC_0, MAGIC_1, VERSION, code.toByte(),
                 (id ushr 24).toByte(), (id ushr 16).toByte(), (id ushr 8).toByte(), id.toByte(),
-            )
+            ) + cleanName(PetStore.get(this, now).name).toByteArray(Charsets.US_ASCII)
             advertiser.startAdvertising(
                 AdvertiseSettings.Builder()
                     .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
@@ -190,7 +195,7 @@ class MeetActivity : Activity() {
         }
     }
 
-    private fun onFriendNearby(id: Int, code: Int) {
+    private fun onFriendNearby(id: Int, code: Int, friendName: String) {
         val now = System.currentTimeMillis()
         val isNewMeeting = friendCode == null || friendId != id
         friendCode = code
@@ -198,8 +203,9 @@ class MeetActivity : Activity() {
         friendSeenAt = now
         if (!isNewMeeting) return
 
-        val name = PetScene.nameForCode(code)
-        message = when (Friends.met(this, id, code, now)) {
+        // Their pet's own name if it has one, otherwise what kind it is (PIP, NOVA...).
+        val name = friendName.ifEmpty { PetScene.nameForCode(code) }
+        message = when (Friends.met(this, id, code, now, friendName)) {
             Friends.Meeting.NEW_FRIEND -> {
                 PetStore.metFriend(this, now)
                 "YOU MET $name! A NEW FRIEND. YOUR PET IS DELIGHTED."
@@ -215,7 +221,7 @@ class MeetActivity : Activity() {
     private fun render(now: Long) {
         val state = PetStore.get(this, now)
         val grid = PetScene.renderMeeting(state, now, friendCode)
-        petView.setImageBitmap(DotPainter.paint(grid, pitch = 20))
+        petDots.show(grid)
         infoView.text = message
         val count = Friends.count(this)
         friendsView.text = when (count) {
@@ -239,6 +245,12 @@ class MeetActivity : Activity() {
         /** Signal strength needed to count as "close": roughly within a metre. */
         const val CLOSE_RSSI = -75
         const val LOST_AFTER_MS = 8_000L
+
+        const val MAX_NAME = 8
+
+        /** Only the letters the dot font has, up to 8 of them. */
+        fun cleanName(raw: String): String =
+            raw.uppercase().filter { it in 'A'..'Z' || it in '0'..'9' || it == ' ' || it == '!' }.trim().take(MAX_NAME)
 
         const val PERMISSION_REQUEST = 3
         val PERMISSIONS = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_ADVERTISE)
@@ -264,7 +276,7 @@ object Friends {
 
     fun count(context: Context): Int = prefs(context).getStringSet("ids", emptySet())?.size ?: 0
 
-    fun met(context: Context, id: Int, code: Int, now: Long): Meeting {
+    fun met(context: Context, id: Int, code: Int, now: Long, name: String = ""): Meeting {
         val p = prefs(context)
         val ids = p.getStringSet("ids", emptySet())?.toMutableSet() ?: mutableSetOf()
         val key = id.toString()
@@ -280,6 +292,7 @@ object Friends {
             .putStringSet("ids", ids)
             .putLong("day_$key", today)
             .putInt("code_$key", code)
+            .putString("name_$key", name)
             .apply()
         return result
     }

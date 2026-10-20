@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.widget.ImageView
 
 /** Paints a [DotGrid] as round dots, Nothing-style: white on black, one red accent, faint unlit dots. */
 object DotPainter {
@@ -20,8 +21,16 @@ object DotPainter {
         pitch: Int,
         shape: ((Int, Int) -> Boolean)? = null,
         ghosts: Boolean = true,
+        reuse: Bitmap? = null,
     ): Bitmap {
-        val bmp = Bitmap.createBitmap(grid.width * pitch, grid.height * pitch, Bitmap.Config.ARGB_8888)
+        val w = grid.width * pitch
+        val h = grid.height * pitch
+        // Paint over an existing picture of the same size if we're given one (saves making a new one each frame).
+        val bmp = if (reuse != null && reuse.isMutable && reuse.width == w && reuse.height == h) {
+            reuse.also { it.eraseColor(Color.TRANSPARENT) }
+        } else {
+            Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        }
         val canvas = Canvas(bmp)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val radius = pitch * 0.40f
@@ -53,4 +62,30 @@ object DotPainter {
 
     fun paintPet(grid: DotGrid, pitch: Int = 16): Bitmap =
         paint(grid, pitch, shape = { x, y -> GlyphShape.contains(x, y) })
+}
+
+/**
+ * A dot picture shown on screen that keeps one bitmap and only repaints it when the dots
+ * actually change. Looks exactly the same as painting a fresh picture every frame, but
+ * does far less work.
+ */
+class LiveDots(private val view: ImageView, private val pitch: Int, private val matrixShape: Boolean = true) {
+    private var bitmap: Bitmap? = null
+    private var levels: IntArray? = null
+    private var accent: BooleanArray? = null
+
+    fun show(grid: DotGrid) {
+        if (levels?.contentEquals(grid.levels) == true && accent?.contentEquals(grid.accent) == true) return
+        val old = bitmap
+        val shape: ((Int, Int) -> Boolean)? = if (matrixShape) { x, y -> GlyphShape.contains(x, y) } else null
+        val painted = DotPainter.paint(grid, pitch, shape = shape, reuse = old)
+        if (painted !== old) {
+            bitmap = painted
+            view.setImageBitmap(painted)
+        } else {
+            view.invalidate()
+        }
+        levels = grid.levels.copyOf()
+        accent = grid.accent.copyOf()
+    }
 }

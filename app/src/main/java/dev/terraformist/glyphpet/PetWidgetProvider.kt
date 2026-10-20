@@ -28,7 +28,7 @@ class PetWidgetProvider : AppWidgetProvider() {
         val pending = goAsync()
         Senses.sample(context) {
             Weather.refreshIfStale(context) {
-                draw(context, manager, ids)
+                draw(context, manager, ids, force = true)
                 pending.finish()
             }
         }
@@ -110,14 +110,23 @@ class PetWidgetProvider : AppWidgetProvider() {
             if (ids.isNotEmpty()) draw(context, manager, ids)
         }
 
-        private fun draw(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        /**
+         * Redraw the widgets. The minute-by-minute checks skip the redraw (and sending the pictures
+         * to the home screen) when nothing would look different; [force] always redraws.
+         */
+        private fun draw(context: Context, manager: AppWidgetManager, ids: IntArray, force: Boolean = false) {
             val now = System.currentTimeMillis()
             val state = PetStore.get(context, now)
             // Pre-draw a short loop; the home screen flips through it every 500ms.
             val weather = Weather.current(context, now)
-            val frames = FRAME_TIMES.map { t ->
-                DotPainter.paintPet(PetScene.render(state, now, animate = true, anim = t, weather = weather), pitch = 12)
-            }
+            val grids = FRAME_TIMES.map { t -> PetScene.render(state, now, animate = true, anim = t, weather = weather) }
+            var sig = ids.contentHashCode()
+            for (g in grids) sig = sig * 31 + g.levels.contentHashCode() * 7 + g.accent.contentHashCode()
+            for (a in state.actions()) sig = sig * 31 + buttonKey(a, state).hashCode()
+            val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
+            if (!force && prefs.contains("sig") && prefs.getInt("sig", 0) == sig) return
+            prefs.edit().putInt("sig", sig).apply()
+            val frames = grids.map { DotPainter.paintPet(it, pitch = 12) }
             for (id in ids) {
                 val views = RemoteViews(context.packageName, R.layout.widget_pet)
                 FRAME_IDS.forEachIndexed { i, viewId ->
@@ -166,6 +175,11 @@ class PetWidgetProvider : AppWidgetProvider() {
             Action.CLEAN -> "CLEAN"
             Action.MEDICINE -> "MEDS"
         }
+
+        /** Everything that decides how a button looks, so unchanged buttons needn't be redrawn. */
+        fun buttonKey(action: Action, state: PetState): String =
+            if (action == Action.MEDICINE) "MEDS|5|alarm"
+            else "${label(action)}|${state.level(action)}|${state.mostNeeded() == action}"
 
         /** The button picture for an action, as it should look right now. */
         fun buttonFor(action: Action, state: PetState): Bitmap =

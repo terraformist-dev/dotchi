@@ -30,6 +30,7 @@ class GameActivity : Activity() {
     private lateinit var titleView: ImageView
     private lateinit var infoView: TextView
     private lateinit var petView: ImageView
+    private val petDots by lazy { LiveDots(petView, pitch = 24) }
     private lateinit var choiceA: TextView
     private lateinit var choiceB: TextView
 
@@ -188,7 +189,7 @@ class GameActivity : Activity() {
             topText = if (inRound && game == Game.HIGH_LOW) number.toString() else null,
             hud = !inRound,
         )
-        petView.setImageBitmap(DotPainter.paintPet(grid, pitch = 24))
+        petDots.show(grid)
     }
 
     private companion object {

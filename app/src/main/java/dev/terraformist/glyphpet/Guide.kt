@@ -133,8 +133,8 @@ object Guide {
             "Got a friend with a Dotchi? Meet up with them!\n\nYou both open the app, tap MEET, and " +
                 "hold your phones close together.\n\nMeeting a friend cheers your Dotchi up a lot, but " +
                 "only the first time each day with each friend.\n\nMeeting uses Bluetooth, so turn it on " +
-                "and allow nearby devices when asked. Only a tiny anonymous message is shared with the " +
-                "other phone to show that it's a unique Dotchi. Nothing else is shared.",
+                "and allow nearby devices when asked. Only a tiny message is shared with the other phone " +
+                "to show that it's a unique Dotchi, along with its name. Nothing else is shared.",
         ),
         Section(
             "HOME SCREEN WIDGET",
@@ -148,7 +148,8 @@ object Guide {
                 "Dotchi appears.\n\nLong-press the back button to choose an action. Each long-press moves " +
                 "to the next one: Feed, Play (or Meds if it’s ill), Clean, then nothing. Wait 2 seconds " +
                 "and the selected action will happen. To cancel an action, long-press until nothing is " +
-                "shown.",
+                "shown.\n\nWhile you're using your screen, Dotchi on the back holds still to save " +
+                "battery. Turn your phone over and it comes back to life.",
         ),
         Section(
             "GLYPH GAMES",

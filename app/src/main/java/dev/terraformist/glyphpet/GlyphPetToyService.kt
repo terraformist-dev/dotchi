@@ -43,9 +43,12 @@ import com.nothing.ketchum.GlyphToy
  * "wake-up" light sensor, otherwise a quick look every couple of minutes while it naps).
  *
  * Animation:
- *  - Screen on, or within a minute of touching the Glyph Button: animates continuously.
- *    (The phone is usually face-down with the screen off when you use a Glyph Toy, so we
- *    keep the processor awake for that minute, otherwise the animation would freeze.)
+ *  - Within 30 seconds of the screen turning on, the phone moving, or touching the Glyph Button:
+ *    animates. (The phone is usually face-down with the screen off when you use a Glyph Toy, so
+ *    we keep the processor awake for that time, otherwise the animation would freeze.)
+ *  - Using the screen with the phone face-up: nobody can see the back, so it shows a still
+ *    picture until the phone is turned over (or the Glyph Button is touched).
+ *  - A frame identical to the last one isn't sent again.
  *  - Always-on Glyph (screen off, toy left running): the system wakes us once a minute,
  *    and the pet does a few seconds of bouncing and blinking each time, then rests.
  *    Animating non-stop there would keep the phone awake all night.
@@ -79,6 +82,12 @@ class GlyphPetToyService : Service() {
 
     /** When the matrix was switched on (it opens out from a dot, like an old TV). */
     private var poweredOnAt = 0L
+
+    /** Last time someone touched the back (Glyph Button, picking the toy): they're looking at it. */
+    private var backTouchedAt = 0L
+
+    /** The last frame sent to the matrix, so an identical one isn't sent again. */
+    private var lastSent: IntArray? = null
 
     private val sensors by lazy {
         PetSensors(applicationContext, onShake = { onShake() }, onFlippedFaceDown = { sayHello() })
@@ -127,9 +136,16 @@ class GlyphPetToyService : Service() {
             val screenOn = power.isInteractive
             if (screenOn) alwaysOn = false
             val g = game
+            val lookingAtBack = selected != null || now - backTouchedAt < ACTIVE_MS
             if (g != null) {
                 runGame(g, now)
                 main.postDelayed(this, GAME_FRAME_MS)
+            } else if (screenOn && !Senses.faceDown && !lookingAtBack) {
+                // Using the screen face-up: nobody can see the back, so just show a still picture.
+                // The sensors keep running so turning the phone over brings it back to life.
+                draw(now, animate = false, dim = false)
+                releaseWakeLock() // the screen being on keeps the phone awake anyway
+                main.postDelayed(this, IN_HAND_CHECK_MS)
             } else if (screenOn || now < animateUntil || selected != null) {
                 draw(now, animate = true, dim = alwaysOn)
                 main.postDelayed(this, FRAME_MS)
@@ -152,7 +168,10 @@ class GlyphPetToyService : Service() {
             when (msg.data?.getString(GlyphToy.MSG_GLYPH_TOY_DATA)) {
                 GlyphToy.EVENT_CHANGE -> onLongPress()
                 GlyphToy.EVENT_AOD -> onAlwaysOnTick()
-                GlyphToy.EVENT_ACTION_DOWN, GlyphToy.EVENT_ACTION_UP -> animateFor(ACTIVE_MS, alwaysOnTick = false)
+                GlyphToy.EVENT_ACTION_DOWN, GlyphToy.EVENT_ACTION_UP -> {
+                    backTouchedAt = System.currentTimeMillis()
+                    animateFor(ACTIVE_MS, alwaysOnTick = false)
+                }
             }
         }
     }
@@ -186,6 +205,8 @@ class GlyphPetToyService : Service() {
                 active = true
                 Weather.refreshIfStale(applicationContext)
                 poweredOnAt = System.currentTimeMillis()
+                backTouchedAt = poweredOnAt
+                lastSent = null
                 sayHello()
             }
 
@@ -231,11 +252,13 @@ class GlyphPetToyService : Service() {
             it.unInit()
         }
         matrix = null
+        lastSent = null
         return false
     }
 
     private fun onLongPress() {
         val now = System.currentTimeMillis()
+        backTouchedAt = now
         // A long-press during a game stops it.
         if (game != null) {
             game = null
@@ -374,8 +397,15 @@ class GlyphPetToyService : Service() {
             }
         }
         for (y in 0 until 25) for (x in 0 until 25) if (!GlyphShape.contains(x, y)) grid.set(x, y, 0)
+        send(manager, IntArray(grid.levels.size) { grid.levels[it] * 4095 / 255 })
+    }
+
+    /** Send a frame to the matrix, unless it's exactly what's already showing. */
+    private fun send(manager: GlyphMatrixManager, frame: IntArray) {
+        if (lastSent?.contentEquals(frame) == true) return
         try {
-            manager.setMatrixFrame(IntArray(grid.levels.size) { grid.levels[it] * 4095 / 255 })
+            manager.setMatrixFrame(frame)
+            lastSent = frame
         } catch (e: Exception) {
             Log.w(TAG, "setMatrixFrame failed", e)
         }
@@ -437,11 +467,7 @@ class GlyphPetToyService : Service() {
             // The matrix takes 0..4095 per LED; our grid is 0..255.
             level * 4095 / 255
         }
-        try {
-            manager.setMatrixFrame(frame)
-        } catch (e: Exception) {
-            Log.w(TAG, "setMatrixFrame failed", e)
-        }
+        send(manager, frame)
     }
 
     companion object {
@@ -455,7 +481,8 @@ class GlyphPetToyService : Service() {
         private const val GAME_HOLD_MS = GlyphGame.DURATION_MS + GlyphGame.SCORE_SHOW_MS + 2_000L
         private const val POKE_MS = 1_500L
         private const val CONFIRM_AFTER_MS = 2_400L
-        private const val ACTIVE_MS = 60_000L
+        private const val ACTIVE_MS = 30_000L
+        private const val IN_HAND_CHECK_MS = 1_000L
         private const val AOD_BURST_MS = 4_000L
         private const val HELLO_MS = 2_500L
         private const val POWER_ON_MS = 900L

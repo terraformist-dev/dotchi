@@ -88,4 +88,10 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   asleep); ill WEAK_SMILE; egg: 3 quick taps KNOCK (two jolts from inside, "KNOCK KNOCK!").
 - Walks (build 21): every 1,000 steps only makes it hungrier (`FOOD_PER_1000_STEPS`); happiness comes only
   from the 5,000-step daily goal (`STEP_GOAL_JOY`). Owner's choice: walking shouldn't replace playing.
+- Battery (build 22): Glyph `ACTIVE_MS` 30s; screen on + face-up + back not touched in 30s -> still frame
+  (checked every 1s, sensors stay on to catch the flip); identical matrix frames aren't re-sent (`send`).
+  Widget minute tick skips redraw when a signature of its 6 grids + buttons is unchanged (prefs "widget"/"sig";
+  `onUpdate` forces). App/Game/Meet use `LiveDots` (one reused bitmap, repaint only on change); buttons cached.
+- Meet names (build 22): the pet's name (dot-font chars, max 8) is appended after the 8-byte payload
+  (VERSION stays 1 so older builds still match); shown instead of the form label when present.
 - Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). An over-play cooldown (played out, head shake) was removed in build 18 at the owner's request: it got in the way when shakes happen naturally while carrying the phone. Don't re-add it.

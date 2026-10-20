@@ -46,6 +46,10 @@ class MainActivity : Activity() {
     private val tapTimes = ArrayDeque<Long>()
     private val holdCheck = Runnable { onPetHeld() }
 
+    // Pictures are only repainted when something in them changes.
+    private val petDots by lazy { LiveDots(petView, pitch = 24) }
+    private val shownButtons = arrayOfNulls<String>(3)
+
     // Shake the phone: wakes it if it's asleep, otherwise a quick play.
     // The light sensor and step counter are read here too.
     private val sensors by lazy {
@@ -372,12 +376,7 @@ class MainActivity : Activity() {
         val state = PetStore.get(this, now, lookingNow = true)
         val weather = Weather.current(this, now)
         val poked = now - pokedAt < POKE_MS
-        petView.setImageBitmap(
-            DotPainter.paintPet(
-                PetScene.render(state, now, animate = true, weather = weather, poke = poked, touch = currentTouch(now)),
-                pitch = 24,
-            )
-        )
+        petDots.show(PetScene.render(state, now, animate = true, weather = weather, poke = poked, touch = currentTouch(now)))
 
         // The name (or "DOTCHI" until it has one), written in dots. Only redrawn when it changes.
         val title = state.name.ifEmpty { "DOTCHI" }
@@ -388,8 +387,12 @@ class MainActivity : Activity() {
 
         state.actions().forEachIndexed { slot, action ->
             val view = buttons[slot]
-            view.setImageBitmap(PetWidgetProvider.buttonFor(action, state))
-            view.contentDescription = PetWidgetProvider.label(action)
+            val key = PetWidgetProvider.buttonKey(action, state)
+            if (key != shownButtons[slot]) {
+                view.setImageBitmap(PetWidgetProvider.buttonFor(action, state))
+                view.contentDescription = PetWidgetProvider.label(action)
+                shownButtons[slot] = key
+            }
         }
 
         val knocking = touchKind == TouchKind.KNOCK && now < touchUntil
