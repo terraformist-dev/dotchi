@@ -34,7 +34,8 @@ object Guide {
             "THE BUTTONS",
             "FEED fills its tummy. Try not to overdo it!\n\nPLAY opens up some minigames. Playing " +
                 "makes it happier, and winning makes it much happier.\n\nCLEAN tidies up its mess. It " +
-                "needs the toilet every few hours.\n\nUnder the buttons: GUIDE (this page), ALBUM (your " +
+                "needs the toilet every few hours.\n\nAfter feeding or cleaning, that button fades for a " +
+                "few seconds while Dotchi gets on with it.\n\nUnder the buttons: GUIDE (this page), ALBUM (your " +
                 "keepsakes) and MEET (visit a friend’s pet).",
         ),
         Section(

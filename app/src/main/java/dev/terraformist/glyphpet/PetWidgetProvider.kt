@@ -179,14 +179,19 @@ class PetWidgetProvider : AppWidgetProvider() {
         /** Everything that decides how a button looks, so unchanged buttons needn't be redrawn. */
         fun buttonKey(action: Action, state: PetState): String =
             if (action == Action.MEDICINE) "MEDS|5|alarm"
-            else "${label(action)}|${state.level(action)}|${state.mostNeeded() == action}"
+            else "${label(action)}|${state.level(action)}|${state.mostNeeded() == action}|" +
+                state.isPausing(action, System.currentTimeMillis())
 
         /** The button picture for an action, as it should look right now. */
         fun buttonFor(action: Action, state: PetState): Bitmap =
             if (action == Action.MEDICINE) {
                 buttonBitmap(label(action), 5, highlight = true, alarm = true)
             } else {
-                buttonBitmap(label(action), state.level(action), highlight = state.mostNeeded() == action)
+                buttonBitmap(
+                    label(action), state.level(action), highlight = state.mostNeeded() == action,
+                    // Just fed or cleaned: the label fades while it takes a short pause.
+                    faded = state.isPausing(action, System.currentTimeMillis()),
+                )
             }
 
         /**
@@ -202,7 +207,7 @@ class PetWidgetProvider : AppWidgetProvider() {
         ): Bitmap {
             val g = DotGrid(21, 9)
             val textX = (g.width - DotFont.width(label)) / 2
-            // Faded: resting from that (e.g. played out), so the label is dimmed.
+            // Faded: taking a short pause after being used, so the label is dimmed.
             g.text(label, textX, 0, level = if (faded) 80 else 255, red = highlight && !faded)
             val meterX = (g.width - 9) / 2
             for (i in 0 until 5) {

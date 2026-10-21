@@ -125,6 +125,11 @@ data class PetState(
         return Mood.OK
     }
 
+    /** Just fed or cleaned: that button takes a short pause before it can be used again. */
+    fun isPausing(action: Action, now: Long): Boolean =
+        (action == Action.FEED || action == Action.CLEAN) && lastAction == action &&
+            now - lastActionAt in 0L until ACTION_PAUSE_MS
+
     /** 0..1 through the happy glow (rings and a heart) that follows a good feed, a win or a friend; -1 if none. */
     fun glowProgress(now: Long): Float {
         if (glowAt <= 0L) return -1f
@@ -408,6 +413,7 @@ data class PetState(
     /** Apply a feed / play / clean / medicine. Call [advanceTo] first. */
     fun apply(action: Action, now: Long): PetState {
         if (stage(now) == Stage.EGG) return this
+        if (isPausing(action, now)) return this // just fed / cleaned: give it a moment
         return when (action) {
             Action.FEED -> if (food >= FULL) {
                 // Already full: it eats anyway, gets an upset tummy, and will make extra mess soon.
@@ -462,7 +468,7 @@ data class PetState(
         if (stage(now) == Stage.EGG || sick) return this
         return copy(
             joy = (joy + boost).coerceAtMost(100f),
-            food = (food - 5f).coerceAtLeast(0f),
+            food = (food - PLAY_FOOD).coerceAtLeast(0f),
             lastAction = Action.PLAY,
             lastActionAt = now,
         )
@@ -478,6 +484,10 @@ data class PetState(
         const val CHILD_MS = 3 * DAY_MS
 
         const val REACT_MS = 3_000L
+        /** After feeding or cleaning, the same button rests this long (stops button-mashing). */
+        const val ACTION_PAUSE_MS = REACT_MS
+        /** Each play uses up a little energy (food). */
+        const val PLAY_FOOD = 3f
         const val GLOW_MS = 6_000L
         /** Medicine: a bright wave runs down through it for this long, then it glows well again. */
         const val MEDICINE_WAVE_MS = 1_200L

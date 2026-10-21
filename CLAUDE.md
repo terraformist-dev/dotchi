@@ -94,4 +94,7 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   `onUpdate` forces). App/Game/Meet use `LiveDots` (one reused bitmap, repaint only on change); buttons cached.
 - Meet names (build 22): the pet's name (dot-font chars, max 8) is appended after the 8-byte payload
   (VERSION stays 1 so older builds still match); shown instead of the form label when present.
+- Build 23: Meet scene widened to 37 dots so an adult friend's wave fits. FEED/CLEAN pause for
+  `ACTION_PAUSE_MS` (3s) after use (`isPausing`, label faded). Each play costs `PLAY_FOOD` (3, was 5).
+  Rain never changed hunger (only joy via `RAIN_GLOOM_PER_HOUR`); hunger is 5.5/h, x1.3 when hot.
 - Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). An over-play cooldown (played out, head shake) was removed in build 18 at the owner's request: it got in the way when shakes happen naturally while carrying the phone. Don't re-add it.

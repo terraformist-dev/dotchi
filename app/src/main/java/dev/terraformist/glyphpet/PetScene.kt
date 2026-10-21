@@ -525,7 +525,7 @@ object PetScene {
         else -> Art.BABY
     }
 
-    const val MEET_WIDTH = 33
+    const val MEET_WIDTH = 37 // room for an adult friend's waving hand
     const val MEET_HEIGHT = 21
 
     /**
@@ -550,9 +550,9 @@ object PetScene {
         }
 
         drawPet(g, mine, Mood.HAPPY, anim, animate = true, look = 1, waving = false, waking = -1f,
-            centerX = 8, feetY = feet)
+            centerX = 9, feetY = feet)
         drawPet(g, bodyForCode(friendCode), Mood.HAPPY, anim + 250, animate = true, look = -1,
-            waving = true, waking = -1f, centerX = MEET_WIDTH - 9, feetY = feet)
+            waving = true, waking = -1f, centerX = MEET_WIDTH - 12, feetY = feet)
         // Hearts drifting up between them.
         val rise = ((anim / 300) % 4).toInt()
         g.stamp(Art.HEART, MEET_WIDTH / 2 - 2, 4 - rise.coerceAtMost(3), red = true)
