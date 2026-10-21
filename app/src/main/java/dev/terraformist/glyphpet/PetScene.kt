@@ -138,6 +138,24 @@ private object Art {
         eyeLeftX = 3, eyeRightX = 8, eyeY = 5, eyeWidth = 2, mouthX = 6, mouthY = 8, headY = 3,
     )
 
+    // Adult, rare: a busy childhood out and about. Little wings and two feelers.
+    val FLIT = Body(
+        Sprite(
+            "...#.....#...",
+            "....#...#....",
+            "...#######...",
+            "..#########..",
+            "#.#########.#",
+            "#.#########.#",
+            "#.#########.#",
+            "..#########..",
+            "..#########..",
+            "...#######...",
+            "...##...##...",
+        ),
+        eyeLeftX = 3, eyeRightX = 8, eyeY = 4, eyeWidth = 2, mouthX = 6, mouthY = 7, headY = 2,
+    )
+
     // Adult, poor care: a wide, low, drippy blob.
     val GLOOP = Body(
         Sprite(
@@ -295,6 +313,7 @@ private object Art {
         Form.NOVA -> NOVA
         Form.BUD -> BUD
         Form.GLOOP -> GLOOP
+        Form.FLIT -> FLIT
         null -> if (stage == Stage.ADULT) NOVA else if (stage == Stage.CHILD) PIP else BABY
     }
 }
@@ -368,12 +387,13 @@ object PetScene {
             val glow = state.glowProgress(now)
             if (animate && glow >= 0f && moodOverride == null && mood in GLOW_MOODS) {
                 val shape = DotGrid(SIZE, SIZE)
-                drawPet(shape, body, mood, anim, animate, look, greeting, waking, season = season)
+                drawPet(shape, body, mood, anim, animate, look, greeting, waking, season = season, markings = state.markings)
                 drawGlow(g, shape, anim)
             }
             drawPet(
                 g, body, mood, anim, animate, look, greeting, waking,
                 season = season, growing = growing, medicine = medicine, touch = touch,
+                trait = if (moodOverride == null) state.trait else null, markings = state.markings,
             )
             // Hatching: the egg bursts into light, which fades out from the middle.
             if (stage == Stage.BABY && growing in 0f..HATCH_FLASH) drawHatchFlash(g, growing / HATCH_FLASH)
@@ -462,7 +482,7 @@ object PetScene {
     /** Draw this pet anywhere on a grid (for the Glyph games). */
     fun drawPetAt(g: DotGrid, state: PetState, now: Long, centerX: Int, feetY: Int, mood: Mood, anim: Long, look: Int = 0) {
         drawPet(g, Art.body(state.stage(now), state.form(now)), mood, anim, animate = true, look = look,
-            waving = false, waking = -1f, centerX = centerX, feetY = feetY)
+            waving = false, waking = -1f, centerX = centerX, feetY = feetY, markings = state.markings)
     }
 
     /** Width of this pet's body in dots. */
@@ -513,6 +533,7 @@ object PetScene {
         4 -> Form.NOVA.label
         5 -> Form.BUD.label
         6 -> Form.GLOOP.label
+        7 -> Form.FLIT.label
         else -> "BABY"
     }
 
@@ -522,6 +543,7 @@ object PetScene {
         4 -> Art.NOVA
         5 -> Art.BUD
         6 -> Art.GLOOP
+        7 -> Art.FLIT
         else -> Art.BABY
     }
 
@@ -542,7 +564,7 @@ object PetScene {
             // Searching: in the middle, glancing left and right.
             val look = if ((anim / 900) % 2 == 0L) -1 else 1
             drawPet(g, mine, Mood.OK, anim, animate = true, look = look, waving = false, waking = -1f,
-                centerX = MEET_WIDTH / 2, feetY = feet)
+                centerX = MEET_WIDTH / 2, feetY = feet, markings = state.markings)
             // "..." searching dots above it.
             val lit = ((anim / 400) % 4).toInt()
             for (i in 0 until 3) g.set(MEET_WIDTH / 2 - 2 + i * 2, 1, if (i < lit) 200 else 40)
@@ -550,7 +572,7 @@ object PetScene {
         }
 
         drawPet(g, mine, Mood.HAPPY, anim, animate = true, look = 1, waving = false, waking = -1f,
-            centerX = 9, feetY = feet)
+            centerX = 9, feetY = feet, markings = state.markings)
         drawPet(g, bodyForCode(friendCode), Mood.HAPPY, anim + 250, animate = true, look = -1,
             waving = true, waking = -1f, centerX = MEET_WIDTH - 12, feetY = feet)
         // Hearts drifting up between them.
@@ -701,10 +723,16 @@ object PetScene {
         growing: Float = -1f,
         medicine: Float = -1f,
         touch: Touch? = null,
+        trait: Trait? = null,
+        markings: Int? = null,
     ) {
         val sprite = body.sprite
         val tk = touch?.kind
         val te = touch?.elapsed ?: 0L
+        // Its personality shows in a little habit every 9 seconds or so, when it's just hanging about.
+        val habitT = anim % 9_000L - 5_800L
+        val habit = if (animate && trait != null && tk == null && (mood == Mood.HAPPY || mood == Mood.OK) &&
+            habitT in 0L until 800L) trait else null
         // Medicine: a bright wave runs down through it, then it's well again.
         val wave = mood == Mood.MEDICATED && medicine in 0f..1f
         // Growing up: flickers in and out among sparkles, then settles.
@@ -713,7 +741,9 @@ object PetScene {
         val wakingWriggle = waking in 0f..0.3f
         val wakingJump = waking > 0.3f
 
-        val lift = if (!animate) 0 else if (tk == TouchKind.BOOP) {
+        val lift = if (!animate) 0 else if (habit == Trait.PLAYFUL) {
+            intArrayOf(1, 2, 3, 3, 2, 1, 0, 0)[(habitT / 100).toInt().coerceIn(0, 7)]
+        } else if (tk == TouchKind.BOOP) {
             intArrayOf(1, 2, 3, 3, 2, 1, 0, 0)[(te / 90).toInt().coerceIn(0, 7)]
         } else if (tk == TouchKind.TICKLE) {
             ((te / 120) % 2).toInt()
@@ -739,7 +769,7 @@ object PetScene {
             TouchKind.TICKLE -> if ((te / 90) % 2 == 0L) -1 else 1
             TouchKind.SNUGGLE -> touch?.lean ?: 0
             TouchKind.STIR -> if (te in 150L until 450L) 1 else 0
-            else -> 0
+            else -> if (habit == Trait.TIDY) (if ((habitT / 90) % 2 == 0L) -1 else 1) else 0
         }
         val left = centerX - sprite.width / 2 + shiver + (if (tk == TouchKind.TICKLE || tk == TouchKind.SNUGGLE) 0 else dash) + wriggle + nudge
         val top = feetY - sprite.height + 1 - lift
@@ -763,6 +793,12 @@ object PetScene {
             val shade = if (flicker) 1f else shading(sprite, x, y)
             g.set(left + x, top + y, (base * shade).roundToInt())
         }
+        // Its own markings: a few dimmer dots that make it look like no other Dotchi.
+        if (!flicker && markings != null) {
+            for ((mx0, my0) in markCells(body, markings)) {
+                g.set(left + mx0, top + my0, g.level(left + mx0, top + my0) * 55 / 100)
+            }
+        }
         // A little blush on the cheeks.
         if (!flicker) {
             for (cx in listOf(body.mouthX - 4, body.mouthX + 4)) {
@@ -779,8 +815,10 @@ object PetScene {
         val wideEyes = tk == TouchKind.BOOP && te < 500L
         val eyesClosed = !wideEyes && (mood == Mood.SLEEPING || mood == Mood.PLAYING || mood == Mood.SICK ||
             wave || mood == Mood.STUFFED || wakingWriggle || (blink && mood != Mood.WAKING) ||
-            tk == TouchKind.TICKLE || tk == TouchKind.SNUGGLE || tk == TouchKind.STIR)
-        val turn = look
+            tk == TouchKind.TICKLE || tk == TouchKind.SNUGGLE || tk == TouchKind.STIR ||
+            (habit == Trait.SLEEPY && habitT in 100L until 700L))
+        // Sociable: looks around for company.
+        val turn = look + if (habit == Trait.SOCIAL) (if (habitT < 400L) -1 else 1) else 0
         for (ex in listOf(left + body.eyeLeftX + turn, left + body.eyeRightX + turn)) {
             for (dx in 0 until body.eyeWidth) {
                 if (eyesClosed) {
@@ -819,6 +857,8 @@ object PetScene {
             tk == TouchKind.TICKLE -> if ((te / 180) % 2 == 0L) openMouth(g, mx, my) else smile(g, mx, my)
             tk == TouchKind.SNUGGLE || tk == TouchKind.WEAK_SMILE -> smile(g, mx, my)
             tk == TouchKind.STIR -> g.carve(mx, my + 1)
+            habit == Trait.GREEDY -> if ((habitT / 150) % 2 == 0L) openMouth(g, mx, my) else flat(g, mx, my) // licks its lips
+            habit == Trait.SLEEPY && habitT in 100L until 700L -> openMouth(g, mx, my) // a big yawn
             else -> drawMouth(g, mood, mx, my, wave, wakingWriggle, animate, anim)
         }
     }
@@ -835,6 +875,34 @@ object PetScene {
             Mood.EATING -> if (!animate || (anim / 250) % 2 == 0L) openMouth(g, mx, my) else flat(g, mx, my)
             Mood.SLEEPING -> g.carve(mx, my + 1)
             else -> flat(g, mx, my)
+        }
+    }
+
+    /**
+     * Which body dots are part of its markings: spots, a patch, a belly stripe, socks or a cap,
+     * placed by [seed]. The face (eyes, mouth, cheeks) is always left clear.
+     */
+    private fun markCells(body: Body, seed: Int): List<Pair<Int, Int>> {
+        val s = body.sprite
+        val rnd = kotlin.random.Random(seed * 31 + s.width * 7 + s.height)
+        fun lit(x: Int, y: Int) = s.at(x, y) == '#'
+        fun face(x: Int, y: Int) = y in (body.eyeY - 1)..(body.mouthY + 1) && x in (body.mouthX - 4)..(body.mouthX + 4)
+        val cells = ArrayList<Pair<Int, Int>>()
+        for (y in 0 until s.height) for (x in 0 until s.width) if (lit(x, y) && !face(x, y)) cells.add(x to y)
+        if (cells.isEmpty()) return emptyList()
+        return when (Math.floorMod(seed, 5)) {
+            0 -> cells.filter { (x, y) -> lit(x - 1, y) && lit(x + 1, y) && lit(x, y - 1) && lit(x, y + 1) }
+                .ifEmpty { cells }.shuffled(rnd).take(3) // spots
+            1 -> {
+                val (ax, ay) = cells[rnd.nextInt(cells.size)]
+                cells.filter { (x, y) -> x in ax..ax + 2 && y in ay..ay + 1 } // a patch
+            }
+            2 -> cells.filter { (_, y) -> y > body.mouthY + 1 && (y - body.mouthY) % 2 == 0 } // a belly stripe
+            3 -> {
+                val bottom = cells.maxOf { it.second }
+                cells.filter { it.second == bottom } // socks
+            }
+            else -> cells.filter { (_, y) -> y < body.eyeY - 1 } // a cap
         }
     }
 

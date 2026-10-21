@@ -65,7 +65,7 @@ object Guide {
         Section(
             "SLEEP AND NAPS",
             "Your Dotchi has very regular sleep patterns. It sleeps from 11pm to 7am and conserves " +
-                "its energy.\n\nIt also naps during the day:\n\nWhen it’s dark, like a dark room or your " +
+                "its energy. A sleepy one goes to bed an hour earlier and gets up an hour later.\n\nIt also naps during the day:\n\nWhen it’s dark, like a dark room or your " +
                 "pocket, it dozes off. When the lights come back on, it wakes up. Its needs build up " +
                 "slower while napping.\n\nWhen you plug your phone in to charge, it naps on the charger. " +
                 "Charging naps slowly cheer it up, and is jolted awake when you unplug.\n\nFeeding, " +
@@ -111,6 +111,13 @@ object Guide {
                 "treat it. Keep it fed, happy, clean and healthy for the best results.",
         ),
         Section(
+            "EVERY DOTCHI IS DIFFERENT",
+            "No two Dotchi are quite the same. Each one hatches with its own markings, and its own " +
+                "personality.\n\nSome are greedy, some are playful, some are tidy, some are sleepy, and " +
+                "some love company. Watch how yours behaves and see if you can work out which it is. " +
+                "Once it's grown up, you'll find its personality in your Album.",
+        ),
+        Section(
             "ADVENTURES AND GENERATIONS",
             "After two weeks as an adult, your pet sets off on an adventure. It leaves you a gift: an " +
                 "egg. The next generation.\n\nYour adult Dotchi is remembered in your Album, and you " +
@@ -120,8 +127,10 @@ object Guide {
             "ALBUM",
             "Tap ALBUM to remember your keepsakes. It includes every form you’ve raised, every Dotchi " +
                 "that has gone on its adventure, how many friends you’ve met, and your walking " +
-                "records.\n\nTry raising all six forms. Different types of care lead to different " +
-                "outcomes.",
+                "records, along with each grown-up Dotchi's personality.\n\nTry raising all seven " +
+                "forms. Different types of care lead to different outcomes. One of them is rare, and " +
+                "only turns up for a well looked-after Dotchi that had a very busy childhood out and " +
+                "about.",
         ),
         Section(
             "MINIGAMES",

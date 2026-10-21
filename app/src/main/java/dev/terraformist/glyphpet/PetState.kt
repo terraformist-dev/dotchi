@@ -33,6 +33,19 @@ enum class Form(val stage: Stage, val label: String) {
     NOVA(Stage.ADULT, "NOVA"),     // adult, excellent care
     BUD(Stage.ADULT, "BUD"),       // adult, decent care
     GLOOP(Stage.ADULT, "GLOOP"),   // adult, poor care
+    FLIT(Stage.ADULT, "FLIT"),     // adult, rare: decent care and a busy childhood (lots of walks or friends)
+}
+
+/**
+ * Each Dotchi's personality, fixed when it's laid as an egg (worked out from [PetState.bornAt],
+ * so it needs no saving). It nudges the numbers a little, and shows in a small habit now and then.
+ */
+enum class Trait(val label: String) {
+    GREEDY("GREEDY"),     // gets hungry faster, loves its food (habit: licks its lips)
+    PLAYFUL("PLAYFUL"),   // gets bored faster, gets more from playing (habit: a sudden little hop)
+    TIDY("TIDY"),         // makes less mess (habit: gives itself a quick tidy-up shake)
+    SLEEPY("SLEEPY"),     // goes to bed an hour earlier and gets up an hour later (habit: yawns)
+    SOCIAL("SOCIABLE"),   // meeting friends cheers it up even more (habit: looks around for company)
 }
 
 /**
@@ -72,11 +85,14 @@ data class PetState(
     val farewellForm: Form? = null,
     val farewellName: String = "",
     val farewellGen: Int = 0,
+    val farewellTrait: Trait? = null,
     val daycareUntil: Long = 0L,
     val daycareDay: Long = -1L,  // the day daycare was last used (once a day)
     // Too much of a good thing:
     val overfedAt: Long = 0L,     // last time it was fed while already full
     val extraMess: Int = 0,       // extra mess its upset tummy will add next time it goes
+    val childSteps: Int = 0,      // steps walked while a child (for the rare form)
+    val childFriends: Int = 0,    // friend meetings while a child (for the rare form)
     val glowAt: Long = 0L,        // last feed while hungry, game win or friend: a happy glow follows
 ) {
 
@@ -125,6 +141,15 @@ data class PetState(
         return Mood.OK
     }
 
+    /** How often it needs the toilet: a tidy one goes less often. */
+    fun poopEvery(): Long = if (trait == Trait.TIDY) (POOP_EVERY_MS * 1.5).toLong() else POOP_EVERY_MS
+
+        /** Its personality, settled the moment the egg was laid. */
+    val trait: Trait get() = Trait.entries[(mix(bornAt) ushr 33).toInt().mod(Trait.entries.size)]
+
+    /** A number for its markings (spots, patches...), also settled when the egg was laid. */
+    val markings: Int get() = (mix(bornAt xor 0x5DEECE66DL) ushr 20).toInt()
+
     /** Just fed or cleaned: that button takes a short pause before it can be used again. */
     fun isPausing(action: Action, now: Long): Boolean =
         (action == Action.FEED || action == Action.CLEAN) && lastAction == action &&
@@ -139,7 +164,7 @@ data class PetState(
 
     /** Asleep for the night or napping, and not just woken up or out for a walk. */
     fun isAsleep(now: Long): Boolean =
-        (isNight(now) || nap != null) && now - lastActionAt > AWAKE_AFTER_ACTION_MS &&
+        (isNight(now, sleepy = trait == Trait.SLEEPY) || nap != null) && now - lastActionAt > AWAKE_AFTER_ACTION_MS &&
             !recentlyWoken(now) && !isWalking(now)
 
     /** Woken up in the last [WOKEN_AWAKE_MS]: stays awake, and won't start a new nap. */
@@ -226,6 +251,7 @@ data class PetState(
             joy = joy.coerceIn(0f, 100f),
             food = food.coerceIn(0f, 100f),
             walkingUntil = if (live) now + WALKING_SHOW_MS else walkingUntil,
+            childSteps = if (stage(now) == Stage.CHILD) childSteps + steps else childSteps,
             // A little celebration (hearts) for reaching the daily goal.
             lastAction = if (goal) Action.PLAY else lastAction,
             lastActionAt = if (goal) now else lastActionAt,
@@ -287,6 +313,7 @@ data class PetState(
             farewellForm = old.adultForm ?: Form.GLOOP,
             farewellName = old.name,
             farewellGen = old.generation,
+            farewellTrait = old.trait,
         )
         return egg.advanceTo(now, zone, climate)
     }
@@ -318,7 +345,7 @@ data class PetState(
             if (stage(mid) != Stage.EGG) {
                 // [nap] can only have changed at [napSince], which is never later than [lastTick].
                 val napping = nap != null && mid >= napSince
-                val night = isNight(mid, zone)
+                val night = isNight(mid, zone, trait == Trait.SLEEPY)
                 // Shaken awake: stays up for a while, even at night.
                 val woken = wokenAt > 0L && mid >= wokenAt && mid < wokenAt + WOKEN_AWAKE_MS
                 val asleep = (night || napping) && !woken
@@ -334,7 +361,8 @@ data class PetState(
                 if (asleep && napping && nap == Nap.CHARGING) joy += CHARGING_JOY_PER_HOUR * hours
                 // Hot weather makes it hungrier.
                 val heat = if (climate?.hot == true && !asleep) HOT_FOOD_FACTOR else 1f
-                food -= FOOD_PER_HOUR * hours * pace * heat
+                val greedy = if (trait == Trait.GREEDY) TRAIT_FACTOR else 1f
+                food -= FOOD_PER_HOUR * hours * pace * heat * greedy
                 val gloom = POOP_GLOOM_PER_HOUR * poops + if (sick) SICK_GLOOM_PER_HOUR else 0f
                 // Rain makes it restless indoors; snow delights it.
                 val weatherMood = when {
@@ -343,7 +371,8 @@ data class PetState(
                     climate.snowy -> -SNOW_JOY_PER_HOUR
                     else -> 0f
                 }
-                joy -= (JOY_PER_HOUR + gloom) * hours * pace + weatherMood * hours
+                val restless = if (trait == Trait.PLAYFUL) TRAIT_FACTOR else 1f
+                joy -= (JOY_PER_HOUR * restless + gloom) * hours * pace + weatherMood * hours
 
                 if (end >= nextPoop) {
                     if (asleep || daycare) {
@@ -353,7 +382,7 @@ data class PetState(
                         // An upset tummy (from overeating) makes a bigger mess.
                         poops = (poops + 1 + extraMess).coerceAtMost(MAX_POOPS)
                         extraMess = 0
-                        nextPoop = end + POOP_EVERY_MS
+                        nextPoop = end + poopEvery()
                     }
                 }
 
@@ -380,7 +409,9 @@ data class PetState(
                 neglect = 0L
             }
             if (before == Stage.CHILD && after == Stage.ADULT && adultForm == null) {
+                val busyChildhood = childSteps >= RARE_STEPS || childFriends >= RARE_FRIENDS
                 adultForm = when {
+                    busyChildhood && neglect <= ADULT_OK_MAX_NEGLECT_MS -> Form.FLIT
                     neglect <= ADULT_GREAT_MAX_NEGLECT_MS -> Form.NOVA
                     neglect <= ADULT_OK_MAX_NEGLECT_MS -> Form.BUD
                     else -> Form.GLOOP
@@ -427,6 +458,8 @@ data class PetState(
                 )
             } else copy(
                 food = (food + 35f).coerceAtMost(100f),
+                // A greedy one really enjoys its food.
+                joy = if (trait == Trait.GREEDY) (joy + 5f).coerceAtMost(100f) else joy,
                 nextPoopAt = minOf(nextPoopAt, now + 90 * MINUTE_MS),
                 lastAction = action,
                 lastActionAt = now,
@@ -454,7 +487,8 @@ data class PetState(
     fun metFriend(now: Long): PetState {
         if (stage(now) == Stage.EGG) return this
         return copy(
-            joy = (joy + FRIEND_JOY).coerceAtMost(100f),
+            joy = (joy + FRIEND_JOY * (if (trait == Trait.SOCIAL) TRAIT_FACTOR * 1.2f else 1f)).coerceAtMost(100f),
+            childFriends = if (stage(now) == Stage.CHILD) childFriends + 1 else childFriends,
             lastAction = Action.PLAY,
             lastActionAt = now,
             glowAt = now,
@@ -467,7 +501,7 @@ data class PetState(
     fun played(won: Boolean, now: Long, boost: Float = if (won) 40f else 15f): PetState {
         if (stage(now) == Stage.EGG || sick) return this
         return copy(
-            joy = (joy + boost).coerceAtMost(100f),
+            joy = (joy + boost * (if (trait == Trait.PLAYFUL) TRAIT_FACTOR else 1f)).coerceAtMost(100f),
             food = (food - PLAY_FOOD).coerceAtLeast(0f),
             lastAction = Action.PLAY,
             lastActionAt = now,
@@ -487,7 +521,13 @@ data class PetState(
         /** After feeding or cleaning, the same button rests this long (stops button-mashing). */
         const val ACTION_PAUSE_MS = REACT_MS
         /** Each play uses up a little energy (food). */
-        const val PLAY_FOOD = 3f
+        const val PLAY_FOOD = 5f
+
+        /** How much a personality nudges things (25% more of whatever it's about). */
+        const val TRAIT_FACTOR = 1.25f
+        /** The rare form: a child that walked this much, or met friends this often, and was looked after. */
+        const val RARE_STEPS = 45_000
+        const val RARE_FRIENDS = 4
         const val GLOW_MS = 6_000L
         /** Medicine: a bright wave runs down through it for this long, then it glows well again. */
         const val MEDICINE_WAVE_MS = 1_200L
@@ -567,6 +607,7 @@ data class PetState(
             Form.NOVA -> 4
             Form.BUD -> 5
             Form.GLOOP -> 6
+            Form.FLIT -> 7
             null -> 1
         }
 
@@ -576,15 +617,27 @@ data class PetState(
             4 -> Form.NOVA
             5 -> Form.BUD
             6 -> Form.GLOOP
+            7 -> Form.FLIT
             else -> null
         }
 
         fun epochDay(time: Long, zone: ZoneId = ZoneId.systemDefault()): Long =
             Instant.ofEpochMilli(time).atZone(zone).toLocalDate().toEpochDay()
 
-        fun isNight(time: Long, zone: ZoneId = ZoneId.systemDefault()): Boolean {
+        /** Bedtime is 11pm to 7am; a [sleepy] one goes to bed an hour earlier and gets up an hour later. */
+        fun isNight(time: Long, zone: ZoneId = ZoneId.systemDefault(), sleepy: Boolean = false): Boolean {
             val hour = Instant.ofEpochMilli(time).atZone(zone).hour
-            return hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR
+            val start = if (sleepy) NIGHT_START_HOUR - 1 else NIGHT_START_HOUR
+            val end = if (sleepy) NIGHT_END_HOUR + 1 else NIGHT_END_HOUR
+            return hour >= start || hour < end
+        }
+
+        /** Scrambles a number so nearby egg times give quite different personalities and markings. */
+        fun mix(x: Long): Long {
+            var z = x + -0x61c8864680b583ebL
+            z = (z xor (z ushr 30)) * -0x40a7b892e31b1a47L
+            z = (z xor (z ushr 27)) * -0x6b2fb644ecceee15L
+            return z xor (z ushr 31)
         }
     }
 }

@@ -10,7 +10,7 @@ object Status {
         Mood.SICK -> "ILL"
         Mood.SLEEPING -> if (state.isAtDaycare(now)) "NAPPING AT DAYCARE" else when (state.nap) {
             Nap.CHARGING -> "RECHARGING"
-            Nap.DARK -> if (PetState.isNight(now)) "ASLEEP" else "NAPPING"
+            Nap.DARK -> if (PetState.isNight(now, sleepy = state.trait == Trait.SLEEPY)) "ASLEEP" else "NAPPING"
             null -> "ASLEEP"
         }
         Mood.HAPPY -> "HAPPY"

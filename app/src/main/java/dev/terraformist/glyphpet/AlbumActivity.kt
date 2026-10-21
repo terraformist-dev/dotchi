@@ -39,22 +39,26 @@ class AlbumActivity : Activity() {
         val pet = PetStore.get(this, now)
         val seen = Album.formsSeen(this)
 
-        // Forms: baby, the two children, the three adults.
-        column.addView(heading("FORMS  ·  ${seen.count { it in 1..6 }} OF 6 FOUND"))
+        // Forms: baby, the two children, the three adults, and the rare one.
+        column.addView(heading("FORMS  ·  ${seen.count { it in 1..7 }} OF 7 FOUND"))
         column.addView(formRow(listOf(1), seen))
         column.addView(formRow(listOf(2, 3), seen))
         column.addView(formRow(listOf(4, 5, 6), seen))
-        column.addView(body("Different care raises different forms. Faint outlines are ones you haven't raised yet."))
+        column.addView(formRow(listOf(7), seen))
+        column.addView(body("Different care raises different forms. Faint outlines are ones you haven't raised yet. The last one is rare."))
 
         // Generations.
         column.addView(heading("GENERATIONS"))
         val past = Album.pastPets(this)
         val nowName = pet.name.ifEmpty { pet.name(now) }
         val leaves = DATE.format(Instant.ofEpochMilli(pet.departsAt()).atZone(ZoneId.systemDefault()))
-        val lines = mutableListOf("NO. ${pet.generation}  $nowName  ·  NOW  ·  SETS OFF ${leaves.uppercase()}")
+        // Its personality shows here once it's grown up.
+        val nowTrait = if (pet.stage(now) == Stage.ADULT) "  ·  ${pet.trait.label}" else ""
+        val lines = mutableListOf("NO. ${pet.generation}  $nowName$nowTrait  ·  NOW  ·  SETS OFF ${leaves.uppercase()}")
         for (p in past.reversed()) {
             val who = p.name.ifEmpty { p.form?.label ?: "PET" }
-            val form = if (p.name.isNotEmpty()) " (${p.form?.label ?: "?"})" else ""
+            val form = (if (p.name.isNotEmpty()) " (${p.form?.label ?: "?"})" else "") +
+                (p.trait?.let { "  ·  ${it.label}" } ?: "")
             val left = DATE.format(Instant.ofEpochMilli(p.leftAt).atZone(ZoneId.systemDefault()))
             lines += "NO. ${p.generation}  $who$form  ·  LEFT ${left.uppercase()}"
         }

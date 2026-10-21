@@ -37,7 +37,7 @@ object PetStore {
         var s = saved.advanceTo(now, climate = climate(context, now))
         var changed = s.lastTick != saved.lastTick && now - saved.lastTick > SAVE_EVERY_MS
         if (s.albumPending) {
-            Album.addGeneration(context, s.farewellGen, s.farewellName, s.farewellForm, s.bornAt)
+            Album.addGeneration(context, s.farewellGen, s.farewellName, s.farewellForm, s.bornAt, s.farewellTrait)
             s = s.copy(albumPending = false)
             changed = true
         }
@@ -208,11 +208,14 @@ object PetStore {
             farewellForm = formNamed(p.getString("farewellForm", null)),
             farewellName = p.getString("farewellName", "") ?: "",
             farewellGen = p.getInt("farewellGen", 0),
+            farewellTrait = p.getString("farewellTrait", null)?.let { n -> Trait.entries.firstOrNull { it.name == n } },
             daycareUntil = p.getLong("daycareUntil", 0L),
             daycareDay = p.getLong("daycareDay", -1L),
             overfedAt = p.getLong("overfedAt", 0L),
             extraMess = p.getInt("extraMess", 0),
             glowAt = p.getLong("glowAt", 0L),
+            childSteps = p.getInt("childSteps", 0),
+            childFriends = p.getInt("childFriends", 0),
         )
     }
 
@@ -249,11 +252,14 @@ object PetStore {
             .putString("farewellForm", s.farewellForm?.name)
             .putString("farewellName", s.farewellName)
             .putInt("farewellGen", s.farewellGen)
+            .putString("farewellTrait", s.farewellTrait?.name)
             .putLong("daycareUntil", s.daycareUntil)
             .putLong("daycareDay", s.daycareDay)
             .putLong("overfedAt", s.overfedAt)
             .putInt("extraMess", s.extraMess)
             .putLong("glowAt", s.glowAt)
+            .putInt("childSteps", s.childSteps)
+            .putInt("childFriends", s.childFriends)
             .apply()
     }
 }

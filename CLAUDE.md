@@ -97,4 +97,11 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
 - Build 23: Meet scene widened to 37 dots so an adult friend's wave fits. FEED/CLEAN pause for
   `ACTION_PAUSE_MS` (3s) after use (`isPausing`, label faded). Each play costs `PLAY_FOOD` (3, was 5).
   Rain never changed hunger (only joy via `RAIN_GLOOM_PER_HOUR`); hunger is 5.5/h, x1.3 when hot.
+- Build 24 (replayability): `PLAY_FOOD` back to 5. `Trait` (GREEDY food x1.25 & +5 joy per feed, PLAYFUL joy
+  decay x1.25 & play x1.25, TIDY poops 1.5x less often, SLEEPY bed 22-08, SOCIAL friend joy x1.5) and
+  `markings` (spots/patch/belly stripe/socks/cap, face kept clear, 55% brightness) are both derived from
+  `bornAt` via `PetState.mix`, so nothing extra is saved. Each trait has a habit every 9s when HAPPY/OK
+  (lick lips, hop, tidy shake, yawn, look around). Album shows trait once adult and for past pets.
+  Rare 7th form `FLIT` (code 7): child walked `RARE_STEPS` (45k) or met `RARE_FRIENDS` (4) and neglect
+  within BUD's limit (`childSteps`/`childFriends` saved).
 - Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). An over-play cooldown (played out, head shake) was removed in build 18 at the owner's request: it got in the way when shakes happen naturally while carrying the phone. Don't re-add it.

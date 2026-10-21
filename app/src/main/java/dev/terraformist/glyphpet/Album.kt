@@ -12,7 +12,7 @@ object Album {
 
     private const val PREFS = "album"
 
-    class PastPet(val generation: Int, val name: String, val form: Form?, val leftAt: Long)
+    class PastPet(val generation: Int, val name: String, val form: Form?, val leftAt: Long, val trait: Trait?)
 
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -22,7 +22,7 @@ object Album {
     fun formsSeen(context: Context): Set<Int> =
         (prefs(context).getStringSet("forms", emptySet()) ?: emptySet()).mapNotNull { it.toIntOrNull() }.toSet()
 
-    /** Codes as in [PetState.formCode]: 1 baby, 2 PIP, 3 GRUB, 4 NOVA, 5 BUD, 6 GLOOP. */
+    /** Codes as in [PetState.formCode]: 1 baby, 2 PIP, 3 GRUB, 4 NOVA, 5 BUD, 6 GLOOP, 7 FLIT. */
     fun noteForm(context: Context, code: Int) {
         val key = code.toString()
         val cached = knownForms ?: (prefs(context).getStringSet("forms", emptySet()) ?: emptySet()).also { knownForms = it }
@@ -32,7 +32,7 @@ object Album {
         prefs(context).edit().putStringSet("forms", updated).apply()
     }
 
-    fun addGeneration(context: Context, generation: Int, name: String, form: Form?, leftAt: Long) {
+    fun addGeneration(context: Context, generation: Int, name: String, form: Form?, leftAt: Long, trait: Trait? = null) {
         val list = JSONArray(prefs(context).getString("generations", "[]"))
         list.put(
             JSONObject()
@@ -40,6 +40,7 @@ object Album {
                 .put("n", name)
                 .put("f", form?.name ?: "")
                 .put("t", leftAt)
+                .put("p", trait?.name ?: "")
         )
         prefs(context).edit().putString("generations", list.toString()).apply()
     }
@@ -53,6 +54,7 @@ object Album {
                 name = o.optString("n"),
                 form = Form.entries.firstOrNull { it.name == o.optString("f") },
                 leftAt = o.optLong("t"),
+                trait = Trait.entries.firstOrNull { it.name == o.optString("p") },
             )
         }
     }
