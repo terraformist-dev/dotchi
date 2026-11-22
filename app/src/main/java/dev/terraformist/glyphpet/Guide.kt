@@ -162,6 +162,19 @@ object Guide {
                 "to show that it's a unique Dotchi, along with its name. Nothing else is shared.",
         ),
         Section(
+            "PLAYING TOGETHER",
+            "When you're meeting a friend, tap PLAY TOGETHER and pick a game. Your friend taps JOIN, " +
+                "and after a 3-2-1 you both play the same game at the same time, side by side. You'll " +
+                "see each other's scores as you go.\n\nSTOP THE DOT and PEEKABOO: just like the " +
+                "minigames, but you both get exactly the same rounds. Most hits wins.\n\nQUICK DRAW: " +
+                "wait for the \"!\" and tap as fast as you can. Tap too soon and you lose time. Quickest " +
+                "over five rounds wins.\n\nTAP RACE: tap as fast as you can for six seconds. Most taps " +
+                "wins.\n\nIN SYNC: you each secretly pick LEFT or RIGHT. Every time you match, you score " +
+                "together. Match 3 or more out of 5 and you both win.\n\nPlaying together cheers both " +
+                "Dotchi up, and the winner gets a bit more. Keep your phones close and stay on the Meet " +
+                "screen until the game's done. You'll both need the latest version of Dotchi.",
+        ),
+        Section(
             "HOME SCREEN WIDGET",
             "To add a widget, long-press an empty spot on your home screen, tap Widgets, find Dotchi " +
                 "and drag it out.",

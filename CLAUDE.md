@@ -123,4 +123,12 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   - Meet: friends are per Dotchi (`Friends.petId` = phone id mixed with `bornAt`), "met before" is per
     pair (my pet, their pet), Album count = distinct Dotchi ids; grown-up message when their form code
     changed since this pair last met. Meeting scene loops hello -> catch over heads -> jumping (8s).
+- Build 26 (playing together): `Duels.kt` (`DuelGame`: STOP_DOT, PEEKABOO, QUICK_DRAW lower-wins, TAP_RACE,
+  IN_SYNC co-op; `DuelPlay` plays one side from a shared seed, local timing). `MeetActivity` advertises
+  VERSION 1 (hello + name) when idle and DUEL_VERSION 2 while a duel is on: header(8) + state, game, session,
+  seed(2), round, score(2), choice, prevChoice = 18 bytes, no name (31-byte legacy limit). Old builds ignore
+  v2. States NONE/READY/PLAYING/DONE; both READY with the same session -> 3s countdown; simultaneous invites:
+  the lower pet id's invite wins; DONE is kept advertised so the friend sees the final score; friend lost
+  for 8s or no DONE within 30s ends it with no winner. Reward via `PetStore.played(won)` on each phone.
+  Advert restarts at most every 250ms when the payload changes.
 - Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). An over-play cooldown (played out, head shake) was removed in build 18 at the owner's request: it got in the way when shakes happen naturally while carrying the phone. Don't re-add it.

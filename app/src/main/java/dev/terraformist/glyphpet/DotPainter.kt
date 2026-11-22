@@ -74,6 +74,13 @@ class LiveDots(private val view: ImageView, private val pitch: Int, private val 
     private var levels: IntArray? = null
     private var accent: BooleanArray? = null
 
+    /** Forget what's showing (another LiveDots took over the same view), so the next show() repaints. */
+    fun reset() {
+        bitmap = null
+        levels = null
+        accent = null
+    }
+
     fun show(grid: DotGrid) {
         if (levels?.contentEquals(grid.levels) == true && accent?.contentEquals(grid.accent) == true) return
         val old = bitmap

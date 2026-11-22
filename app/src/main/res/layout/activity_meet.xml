@@ -70,10 +70,19 @@
             </LinearLayout>
         </FrameLayout>
 
+        <!-- Playing together: invitations, the game picker and in-game buttons appear here. -->
+        <TextView android:id="@+id/duel_0" style="@style/GameButton" android:visibility="gone" />
+        <TextView android:id="@+id/duel_1" style="@style/GameButton" android:visibility="gone" />
+        <TextView android:id="@+id/duel_2" style="@style/GameButton" android:visibility="gone" />
+        <TextView android:id="@+id/duel_3" style="@style/GameButton" android:visibility="gone" />
+        <TextView android:id="@+id/duel_4" style="@style/GameButton" android:visibility="gone" />
+        <TextView android:id="@+id/duel_5" style="@style/GameButton" android:visibility="gone" />
+
         <TextView
             android:id="@+id/back"
             android:layout_width="match_parent"
             android:layout_height="56dp"
+            android:layout_marginTop="16dp"
             android:background="@drawable/button_bg"
             android:fontFamily="monospace"
             android:gravity="center"
