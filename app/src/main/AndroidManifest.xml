@@ -13,6 +13,8 @@
     <!-- Weather: rough location, and the internet to fetch the forecast -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- One notification when your Dotchi sets off on its adventure, so you can see it off. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Meet: find other Dotchi nearby over Bluetooth (never used to work out location) -->
     <uses-permission

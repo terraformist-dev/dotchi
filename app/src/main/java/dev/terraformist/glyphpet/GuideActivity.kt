@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.util.TypedValue
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 
 /** Shows [Guide]: one heading and paragraph per section. */
@@ -48,20 +47,7 @@ class GuideActivity : Activity() {
             if (section.heading == Guide.NUDGES_HEADING) column.addView(nudgeSwitch())
         }
 
-        column.addView(TextView(this).apply {
-            text = "BACK"
-            setTextColor(0xFF9A9A9A.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            typeface = Typeface.MONOSPACE
-            setPadding(0, dp(32), dp(16), dp(8))
-            setOnClickListener { finish() }
-        })
-
-        setContentView(ScrollView(this).apply {
-            setBackgroundColor(0xFF000000.toInt())
-            fitsSystemWindows = true
-            addView(column)
-        })
+        setContentView(UiBits.pageWithBack(this, column))
     }
 
     /** The on/off switch for Glyph nudges, shown under that section. */

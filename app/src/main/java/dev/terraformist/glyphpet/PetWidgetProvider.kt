@@ -24,6 +24,7 @@ class PetWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         keepTicking(context)
+        Departures.schedule(context, PetStore.get(context))
         // Every half hour: take a quick look at the light and charger first, so naps start and end.
         val pending = goAsync()
         Senses.sample(context) {
@@ -37,6 +38,13 @@ class PetWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == ACTION_TICK) {
             // About once a minute, but only while the phone is awake (see keepTicking).
+            refreshAll(context)
+            return
+        }
+        if (intent.action == Departures.ACTION) {
+            // Time to check whether it has set off (the check itself sends the notification).
+            val state = PetStore.get(context)
+            Departures.schedule(context, state)
             refreshAll(context)
             return
         }
@@ -177,22 +185,22 @@ class PetWidgetProvider : AppWidgetProvider() {
         }
 
         /** Everything that decides how a button looks, so unchanged buttons needn't be redrawn. */
-        fun buttonKey(action: Action, state: PetState): String =
-            if (action == Action.MEDICINE) "MEDS|5|alarm"
-            else "${label(action)}|${state.level(action)}|${state.mostNeeded() == action}|" +
-                state.isPausing(action, System.currentTimeMillis())
+        fun buttonKey(action: Action, state: PetState): String {
+            val busy = state.isBusy(System.currentTimeMillis())
+            return if (action == Action.MEDICINE) "MEDS|5|alarm|$busy"
+            else "${label(action)}|${state.level(action)}|${state.mostNeeded() == action}|$busy"
+        }
 
         /** The button picture for an action, as it should look right now. */
-        fun buttonFor(action: Action, state: PetState): Bitmap =
-            if (action == Action.MEDICINE) {
-                buttonBitmap(label(action), 5, highlight = true, alarm = true)
+        fun buttonFor(action: Action, state: PetState): Bitmap {
+            // Something's underway (eating, playing, cleaning...): every label fades until it's done.
+            val busy = state.isBusy(System.currentTimeMillis())
+            return if (action == Action.MEDICINE) {
+                buttonBitmap(label(action), 5, highlight = true, alarm = true, faded = busy)
             } else {
-                buttonBitmap(
-                    label(action), state.level(action), highlight = state.mostNeeded() == action,
-                    // Just fed or cleaned: the label fades while it takes a short pause.
-                    faded = state.isPausing(action, System.currentTimeMillis()),
-                )
+                buttonBitmap(label(action), state.level(action), highlight = state.mostNeeded() == action, faded = busy)
             }
+        }
 
         /**
          * A dot-matrix label with a 5-dot meter under it.

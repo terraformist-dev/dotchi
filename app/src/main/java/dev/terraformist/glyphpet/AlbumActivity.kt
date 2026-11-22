@@ -1,13 +1,13 @@
 package dev.terraformist.glyphpet
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.graphics.Typeface
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import java.time.Instant
 import java.time.ZoneId
@@ -39,6 +39,29 @@ class AlbumActivity : Activity() {
         val pet = PetStore.get(this, now)
         val seen = Album.formsSeen(this)
 
+        // Your Dotchi, as it looks now (markings and all).
+        column.addView(ImageView(this).apply {
+            setImageBitmap(DotPainter.paint(PetScene.portraitOf(pet, now), pitch = 16))
+            adjustViewBounds = true
+            contentDescription = pet.name(now)
+            layoutParams = LinearLayout.LayoutParams(dp(176), dp(176)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(20)
+            }
+        })
+        column.addView(TextView(this).apply {
+            val who = pet.name.ifEmpty { pet.name(now) }
+            val form = if (pet.name.isNotEmpty() && pet.stage(now) != Stage.EGG) "  ·  ${pet.name(now)}" else ""
+            val trait = if (pet.stage(now) == Stage.ADULT) "  ·  ${pet.trait.label}" else ""
+            text = "$who$form$trait"
+            setTextColor(0xFFFFFFFF.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.MONOSPACE
+            letterSpacing = 0.1f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
+        })
+
         // Forms: baby, the two children, the three adults, and the rare one.
         column.addView(heading("FORMS  ·  ${seen.count { it in 1..7 }} OF 7 FOUND"))
         column.addView(formRow(listOf(1), seen))
@@ -60,7 +83,8 @@ class AlbumActivity : Activity() {
             val form = (if (p.name.isNotEmpty()) " (${p.form?.label ?: "?"})" else "") +
                 (p.trait?.let { "  ·  ${it.label}" } ?: "")
             val left = DATE.format(Instant.ofEpochMilli(p.leftAt).atZone(ZoneId.systemDefault()))
-            lines += "NO. ${p.generation}  $who$form  ·  LEFT ${left.uppercase()}"
+            val how = if (p.early) "LEFT EARLY" else "LEFT"
+            lines += "NO. ${p.generation}  $who$form  ·  $how ${left.uppercase()}"
         }
         column.addView(body(lines.joinToString("\n")))
 
@@ -77,20 +101,28 @@ class AlbumActivity : Activity() {
             )
         )
 
+        // Starting over is tucked away down here, and needs a press-and-hold, so it can't happen by accident.
         column.addView(TextView(this).apply {
-            text = "BACK"
-            setTextColor(0xFF9A9A9A.toInt())
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            text = "HOLD TO START OVER WITH A NEW EGG"
+            setTextColor(0xFFD71921.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             typeface = Typeface.MONOSPACE
-            setPadding(0, dp(32), dp(16), dp(8))
-            setOnClickListener { finish() }
+            setPadding(0, dp(40), 0, dp(8))
+            setOnLongClickListener {
+                AlertDialog.Builder(this@AlbumActivity)
+                    .setTitle(R.string.reset_title)
+                    .setMessage(R.string.reset_message)
+                    .setPositiveButton(R.string.reset_confirm) { _, _ ->
+                        PetStore.reset(this@AlbumActivity)
+                        recreate()
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+                true
+            }
         })
 
-        setContentView(ScrollView(this).apply {
-            setBackgroundColor(0xFF000000.toInt())
-            fitsSystemWindows = true
-            addView(column)
-        })
+        setContentView(UiBits.pageWithBack(this, column))
     }
 
     /** A row of form portraits with their names (or "???" if not found yet). */

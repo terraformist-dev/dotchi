@@ -12,7 +12,7 @@ object Album {
 
     private const val PREFS = "album"
 
-    class PastPet(val generation: Int, val name: String, val form: Form?, val leftAt: Long, val trait: Trait?)
+    class PastPet(val generation: Int, val name: String, val form: Form?, val leftAt: Long, val trait: Trait?, val early: Boolean = false)
 
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -32,7 +32,9 @@ object Album {
         prefs(context).edit().putStringSet("forms", updated).apply()
     }
 
-    fun addGeneration(context: Context, generation: Int, name: String, form: Form?, leftAt: Long, trait: Trait? = null) {
+    fun addGeneration(
+        context: Context, generation: Int, name: String, form: Form?, leftAt: Long, trait: Trait? = null, early: Boolean = false,
+    ) {
         val list = JSONArray(prefs(context).getString("generations", "[]"))
         list.put(
             JSONObject()
@@ -41,6 +43,7 @@ object Album {
                 .put("f", form?.name ?: "")
                 .put("t", leftAt)
                 .put("p", trait?.name ?: "")
+                .put("e", early)
         )
         prefs(context).edit().putString("generations", list.toString()).apply()
     }
@@ -55,6 +58,7 @@ object Album {
                 form = Form.entries.firstOrNull { it.name == o.optString("f") },
                 leftAt = o.optLong("t"),
                 trait = Trait.entries.firstOrNull { it.name == o.optString("p") },
+                early = o.optBoolean("e", false),
             )
         }
     }

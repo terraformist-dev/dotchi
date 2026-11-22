@@ -37,7 +37,9 @@ object PetStore {
         var s = saved.advanceTo(now, climate = climate(context, now))
         var changed = s.lastTick != saved.lastTick && now - saved.lastTick > SAVE_EVERY_MS
         if (s.albumPending) {
-            Album.addGeneration(context, s.farewellGen, s.farewellName, s.farewellForm, s.bornAt, s.farewellTrait)
+            Album.addGeneration(context, s.farewellGen, s.farewellName, s.farewellForm, s.bornAt, s.farewellTrait, s.farewellEarly)
+            // Let them know, so they can open the app and see it off.
+            Departures.notifyLeft(context, s)
             s = s.copy(albumPending = false)
             changed = true
         }
@@ -209,6 +211,8 @@ object PetStore {
             farewellName = p.getString("farewellName", "") ?: "",
             farewellGen = p.getInt("farewellGen", 0),
             farewellTrait = p.getString("farewellTrait", null)?.let { n -> Trait.entries.firstOrNull { it.name == n } },
+            farewellEarly = p.getBoolean("farewellEarly", false),
+            frailMs = p.getLong("frailMs", 0L),
             daycareUntil = p.getLong("daycareUntil", 0L),
             daycareDay = p.getLong("daycareDay", -1L),
             overfedAt = p.getLong("overfedAt", 0L),
@@ -253,6 +257,8 @@ object PetStore {
             .putString("farewellName", s.farewellName)
             .putInt("farewellGen", s.farewellGen)
             .putString("farewellTrait", s.farewellTrait?.name)
+            .putBoolean("farewellEarly", s.farewellEarly)
+            .putLong("frailMs", s.frailMs)
             .putLong("daycareUntil", s.daycareUntil)
             .putLong("daycareDay", s.daycareDay)
             .putLong("overfedAt", s.overfedAt)

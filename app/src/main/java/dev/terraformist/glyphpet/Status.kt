@@ -7,7 +7,11 @@ object Status {
         Mood.EGG -> "EGG"
         Mood.STUFFED -> "STUFFED"
         Mood.GROWING -> "GROWING UP"
-        Mood.SICK -> "ILL"
+        Mood.SICK -> when (state.frailStage()) {
+            2 -> "PACKING A LITTLE BAG..."
+            1 -> "ILL AND FRAIL"
+            else -> "ILL"
+        }
         Mood.SLEEPING -> if (state.isAtDaycare(now)) "NAPPING AT DAYCARE" else when (state.nap) {
             Nap.CHARGING -> "RECHARGING"
             Nap.DARK -> if (PetState.isNight(now, sleepy = state.trait == Trait.SLEEPY)) "ASLEEP" else "NAPPING"

@@ -86,6 +86,9 @@ data class PetState(
     val farewellName: String = "",
     val farewellGen: Int = 0,
     val farewellTrait: Trait? = null,
+    val farewellEarly: Boolean = false, // the previous pet left early because it was badly neglected
+    val frailMs: Long = 0L,       // awake time spent ill and starving; too much and it leaves early
+    val leftEarlyAt: Long = 0L,   // set by the replay at the moment it gave up and left
     val daycareUntil: Long = 0L,
     val daycareDay: Long = -1L,  // the day daycare was last used (once a day)
     // Too much of a good thing:
@@ -151,9 +154,21 @@ data class PetState(
     val markings: Int get() = (mix(bornAt xor 0x5DEECE66DL) ushr 20).toInt()
 
     /** Just fed or cleaned: that button takes a short pause before it can be used again. */
-    fun isPausing(action: Action, now: Long): Boolean =
-        (action == Action.FEED || action == Action.CLEAN) && lastAction == action &&
-            now - lastActionAt in 0L until ACTION_PAUSE_MS
+    fun isPausing(action: Action, now: Long): Boolean = isBusy(now)
+
+    /**
+     * Something is underway (eating, playing, cleaning, medicine, growing up, a goodbye):
+     * none of the buttons work until it's finished.
+     */
+    fun isBusy(now: Long): Boolean =
+        (lastActionAt > 0L && now - lastActionAt in 0L until ACTION_PAUSE_MS) || isGrowing(now) || isFarewell(now)
+
+    /** How close it is to leaving early: 0 fine, 1 frail, 2 packing a little bag. */
+    fun frailStage(): Int = when {
+        frailMs >= BAG_PACKED_MS -> 2
+        frailMs >= FRAIL_MS -> 1
+        else -> 0
+    }
 
     /** 0..1 through the happy glow (rings and a heart) that follows a good feed, a win or a friend; -1 if none. */
     fun glowProgress(now: Long): Float {
@@ -298,19 +313,23 @@ data class PetState(
     fun advanceTo(now: Long, zone: ZoneId = ZoneId.systemDefault(), climate: Climate? = null): PetState {
         if (now <= lastTick) return this
         val departAt = departsAt()
-        if (now < departAt) return replay(now, zone, climate)
-        val old = if (lastTick < departAt) replay(departAt, zone, climate) else this
-        val egg = newEgg(departAt).copy(
+        // The replay stops early if, badly neglected for too long, it packs up and leaves.
+        val old = if (lastTick < departAt) replay(minOf(now, departAt), zone, climate) else this
+        val early = old.leftEarlyAt > 0L
+        if (!early && now < departAt) return old
+        val leftAt = if (early) old.leftEarlyAt else departAt
+        val egg = newEgg(leftAt).copy(
             generation = old.generation + 1,
             stepsToday = old.stepsToday,
             stepsDay = old.stepsDay,
             nap = old.nap,
-            napSince = departAt,
+            napSince = leftAt,
             daycareUntil = old.daycareUntil,
             daycareDay = old.daycareDay,
             farewellPending = true,
             albumPending = true,
-            farewellForm = old.adultForm ?: Form.GLOOP,
+            farewellForm = if (early) old.form(leftAt) else old.adultForm ?: Form.GLOOP,
+            farewellEarly = early,
             farewellName = old.name,
             farewellGen = old.generation,
             farewellTrait = old.trait,
@@ -332,6 +351,8 @@ data class PetState(
         var neglect = neglectMs
         var childForm = childForm
         var adultForm = adultForm
+        var frail = frailMs
+        var leftEarly = 0L
 
         // Don't replay more than two weeks: after that everything is at zero anyway.
         if (now - t > MAX_REPLAY_MS) t = now - MAX_REPLAY_MS
@@ -396,6 +417,9 @@ data class PetState(
                     }
                     // Neglect: any need left unmet while it's awake.
                     if (sick || poops >= 2 || food < LOW || joy < LOW) neglect += step
+                    // Ill and starving: it grows frail, and in the end packs up and leaves.
+                    // Looking after it again lets it recover twice as fast.
+                    frail = if (sick && food < STARVING) frail + step else maxOf(0L, frail - 2 * step)
                 }
             } else {
                 nextPoop = maxOf(nextPoop, end + POOP_EVERY_MS)
@@ -419,15 +443,21 @@ data class PetState(
                 neglect = 0L
             }
             t = end
+            if (frail >= LEAVE_EARLY_MS) {
+                leftEarly = end
+                break
+            }
         }
 
         // If it was left alone so long that we skipped its growing up, it grew up neglected.
-        val stageNow = stage(now)
+        val stageNow = stage(if (leftEarly > 0L) leftEarly else now)
         if (stageNow >= Stage.CHILD && childForm == null) childForm = Form.GRUB
         if (stageNow == Stage.ADULT && adultForm == null) adultForm = Form.GLOOP
 
         return copy(
-            lastTick = now,
+            lastTick = if (leftEarly > 0L) leftEarly else now,
+            frailMs = frail,
+            leftEarlyAt = leftEarly,
             food = food.coerceIn(0f, 100f),
             joy = joy.coerceIn(0f, 100f),
             poops = poops,
@@ -444,7 +474,7 @@ data class PetState(
     /** Apply a feed / play / clean / medicine. Call [advanceTo] first. */
     fun apply(action: Action, now: Long): PetState {
         if (stage(now) == Stage.EGG) return this
-        if (isPausing(action, now)) return this // just fed / cleaned: give it a moment
+        if (isBusy(now)) return this // something's already underway: give it a moment
         return when (action) {
             Action.FEED -> if (food >= FULL) {
                 // Already full: it eats anyway, gets an upset tummy, and will make extra mess soon.
@@ -574,6 +604,10 @@ data class PetState(
         const val LOW = 25f
         const val HIGH = 60f
         const val STARVING = 10f
+        /** Leaving early: awake hours spent ill and starving (night and daycare don't count). */
+        const val FRAIL_MS = 12 * HOUR_MS
+        const val BAG_PACKED_MS = 24 * HOUR_MS
+        const val LEAVE_EARLY_MS = 32 * HOUR_MS
         const val SICK_AFTER_MS = 2 * HOUR_MS
 
         // Evolution thresholds: awake hours with needs unmet during the previous stage.

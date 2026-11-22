@@ -34,8 +34,8 @@ object Guide {
             "THE BUTTONS",
             "FEED fills its tummy. Try not to overdo it!\n\nPLAY opens up some minigames. Playing " +
                 "makes it happier, and winning makes it much happier.\n\nCLEAN tidies up its mess. It " +
-                "needs the toilet every few hours.\n\nAfter feeding or cleaning, that button fades for a " +
-                "few seconds while Dotchi gets on with it.\n\nUnder the buttons: GUIDE (this page), ALBUM (your " +
+                "needs the toilet every few hours.\n\nWhile Dotchi is busy eating, playing or getting " +
+                "cleaned, all the buttons fade for a few seconds until it's done.\n\nUnder the buttons: GUIDE (this page), ALBUM (your " +
                 "keepsakes) and MEET (visit a friend’s pet).",
         ),
         Section(
@@ -54,6 +54,14 @@ object Guide {
             "If mess is left lying around or it goes hungry for too long, it falls ill. An ill Dotchi " +
                 "gets unhappy faster, and doesn't want to play.\n\nTap MEDS to give it some medicine. It " +
                 "won’t enjoy the taste, but it’ll be fine.",
+        ),
+        Section(
+            "LEAVING EARLY",
+            "Dotchi is forgiving, but if it's left ill and starving for a long time, it starts to give " +
+                "up. First it looks frail and its glow fades. Then it packs a little bag. Leave it any " +
+                "longer and it sets off on its adventure early, and not happily.\n\nNight time and daycare " +
+                "don't count, and looking after it again soon helps it recover. A Dotchi that left early " +
+                "is still remembered in your Album.",
         ),
         Section(
             "TOO MUCH OF A GOOD THING",
@@ -121,11 +129,12 @@ object Guide {
             "ADVENTURES AND GENERATIONS",
             "After two weeks as an adult, your pet sets off on an adventure. It leaves you a gift: an " +
                 "egg. The next generation.\n\nYour adult Dotchi is remembered in your Album, and you " +
-                "start afresh with your new Dotchi.",
+                "start afresh with your new Dotchi.\n\nIf you allow notifications, you'll get one when it " +
+                "sets off, so you can open the app and see it off.",
         ),
         Section(
             "ALBUM",
-            "Tap ALBUM to remember your keepsakes. It includes every form you’ve raised, every Dotchi " +
+            "Tap ALBUM to remember your keepsakes. Your Dotchi is at the top, as it looks now. It includes every form you’ve raised, every Dotchi " +
                 "that has gone on its adventure, how many friends you’ve met, and your walking " +
                 "records, along with each grown-up Dotchi's personality.\n\nTry raising all seven " +
                 "forms. Different types of care lead to different outcomes. One of them is rare, and " +
@@ -136,13 +145,19 @@ object Guide {
             "MINIGAMES",
             "Tap PLAY to pick a game. Each game has 5 rounds. Get 3 or more right to win.\n\nLEFT OR " +
                 "RIGHT: guess which way your pet will look.\n\nHIGHER OR LOWER: your pet shows a number. " +
-                "Guess whether the next number will be higher or lower.",
+                "Guess whether the next number will be higher or lower.\n\nSTOP THE DOT: a light runs " +
+                "along the top. Tap STOP (or the picture) while it's in the bright bit in the middle. It " +
+                "gets faster and the bright bit gets smaller each round.\n\nPEEKABOO: your pet peeks out " +
+                "from behind one of three bushes. Tap that bush before it ducks down again. It hides " +
+                "quicker each round.",
         ),
         Section(
             "MEETING OTHER PETS",
             "Got a friend with a Dotchi? Meet up with them!\n\nYou both open the app, tap MEET, and " +
                 "hold your phones close together.\n\nMeeting a friend cheers your Dotchi up a lot, but " +
-                "only the first time each day with each friend.\n\nMeeting uses Bluetooth, so turn it on " +
+                "only the first time each day with each friend.\n\nEvery Dotchi is a friend in its own " +
+                "right, so when either of you has a new one, they'll be meeting for the first time. And " +
+                "if a friend's Dotchi has grown since you last met, yours will notice.\n\nMeeting uses Bluetooth, so turn it on " +
                 "and allow nearby devices when asked. Only a tiny message is shared with the other phone " +
                 "to show that it's a unique Dotchi, along with its name. Nothing else is shared.",
         ),
@@ -179,7 +194,7 @@ object Guide {
         ),
         Section(
             "STARTING OVER",
-            "At the bottom of the screen, START OVER gives you a new egg. Your current Dotchi will be " +
+            "At the bottom of the Album, press and hold START OVER to get a new egg. Your current Dotchi will be " +
                 "gone for good (it doesn’t go into the Album), so only use it if you mean it.",
         ),
     )

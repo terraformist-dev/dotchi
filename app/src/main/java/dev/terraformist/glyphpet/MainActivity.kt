@@ -13,7 +13,9 @@ import android.os.Handler
 import android.os.Looper
 import android.text.InputFilter
 import android.text.InputType
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.View
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -31,6 +33,7 @@ class MainActivity : Activity() {
     private lateinit var petView: ImageView
     private lateinit var statusView: TextView
     private lateinit var daycareView: TextView
+    private lateinit var todayView: TextView
     private lateinit var buttons: List<ImageView>
 
     private var shownTitle: String? = null
@@ -74,6 +77,7 @@ class MainActivity : Activity() {
         petView = findViewById(R.id.pet)
         statusView = findViewById(R.id.status)
         daycareView = findViewById(R.id.daycare)
+        todayView = findViewById(R.id.today)
         buttons = listOf<ImageView>(findViewById(R.id.btn_feed), findViewById(R.id.btn_play), findViewById(R.id.btn_clean))
 
         // Tap the name to rename the pet.
@@ -94,6 +98,7 @@ class MainActivity : Activity() {
                         if (touchKind == TouchKind.SNUGGLE) touchUntil = System.currentTimeMillis()
                     } else {
                         v.performClick()
+                        v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                         onPetTapped()
                     }
                 }
@@ -109,7 +114,7 @@ class MainActivity : Activity() {
         // Each button does whatever action is in that slot right now
         // (the middle one is Play, or Medicine while the pet is ill).
         buttons.forEachIndexed { slot, view ->
-            view.setOnClickListener { onSlot(slot) }
+            view.setOnClickListener { onSlot(slot, view) }
         }
 
         findViewById<TextView>(R.id.guide).setOnClickListener {
@@ -123,16 +128,8 @@ class MainActivity : Activity() {
         }
         daycareView.setOnClickListener { onDaycare() }
 
-        findViewById<TextView>(R.id.reset).setOnClickListener {
-            AlertDialog.Builder(this)
-                .setTitle(R.string.reset_title)
-                .setMessage(R.string.reset_message)
-                .setPositiveButton(R.string.reset_confirm) { _, _ -> PetStore.reset(this); render() }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-        }
-
         askForPermissionsOnce()
+        askForNotificationsOnce()
         removeOldLockScreenCard()
         Steps.resetOnceAfterFix(this)
     }
@@ -245,6 +242,26 @@ class MainActivity : Activity() {
             .show()
     }
 
+    /** A heads-up when it sets off on its adventure. Asked once, after the first-run questions. */
+    private fun askForNotificationsOnce() {
+        val prefs = getSharedPreferences("app", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("askedWalksWeather", false)) return // one question at a time
+        if (prefs.getBoolean("askedNotifications", false)) return
+        prefs.edit().putBoolean("askedNotifications", true).apply()
+        if (Departures.canNotify(this)) return
+        AlertDialog.Builder(this)
+            .setTitle("A heads-up when it leaves?")
+            .setMessage(
+                "When your Dotchi sets off on its adventure, Dotchi can send you one notification " +
+                    "so you can open the app and see it off. That's the only notification it sends."
+            )
+            .setPositiveButton("Yes please") { _, _ ->
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATIONS_REQUEST)
+            }
+            .setNegativeButton("No thanks", null)
+            .show()
+    }
+
     /**
      * Build 7 had an optional lock-screen card. It's been removed; if it was switched on,
      * take the card and its half-hourly refresh away.
@@ -334,7 +351,7 @@ class MainActivity : Activity() {
 
     // ---- Buttons and drawing ------------------------------------------------------------
 
-    private fun onSlot(slot: Int) {
+    private fun onSlot(slot: Int, view: View) {
         val now = System.currentTimeMillis()
         val state = PetStore.get(this, now)
         if (state.stage(now) == Stage.EGG) {
@@ -343,6 +360,12 @@ class MainActivity : Activity() {
             render()
             return
         }
+        if (state.isBusy(now)) {
+            // Something's already underway: wait for it to finish.
+            view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+            return
+        }
+        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         val action = state.actions()[slot]
         if (action == Action.PLAY) {
             startActivity(Intent(this, GameActivity::class.java))
@@ -354,6 +377,9 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        Departures.appInFront = true
+        Departures.clear(this)
+        Departures.schedule(this, PetStore.get(this))
         handler.post(loop)
         sensors.start()
         Weather.refreshIfStale(this) { render() }
@@ -363,6 +389,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        Departures.appInFront = false
         handler.removeCallbacks(loop)
         handler.removeCallbacks(holdCheck)
         holding = false
@@ -396,26 +423,28 @@ class MainActivity : Activity() {
         }
 
         val knocking = touchKind == TouchKind.KNOCK && now < touchUntil
-        statusView.text = if (knocking) "KNOCK KNOCK!" else if (poked) "STILL AN EGG. NOT LONG NOW!" else statusLine(state, now) + extrasLine(state, now, weather)
+        statusView.text = if (knocking) "KNOCK KNOCK!" else if (poked) "STILL AN EGG. NOT LONG NOW!" else statusLine(state, now)
+        todayView.text = todayLine(state, now, weather)
         daycareView.text = daycareLine(state, now)
 
         maybeAskForName(state, now)
     }
 
-    /** Extra lines: today's steps and the weather, and any special day. */
-    private fun extrasLine(state: PetState, now: Long, weather: WeatherNow?): String {
+    /** The quieter line under the status: today's steps and the weather, and any special day. */
+    private fun todayLine(state: PetState, now: Long, weather: WeatherNow?): String {
         val parts = mutableListOf<String>()
+        if (state.stage(now) != Stage.EGG && !state.isFarewell(now)) parts += "DAY ${state.day(now)}"
         if (Senses.canCountSteps(this)) parts += "%,d STEPS".format(state.stepsOn(now))
         if (weather != null) parts += "${weather.label} ${weather.tempC}°C"
-        var text = if (parts.isEmpty()) "" else "\n" + parts.joinToString("  ·  ")
-        Season.on(now)?.let { text += "\n" + it.greeting }
+        var text = parts.joinToString("  ·  ")
+        Season.on(now)?.let { text = if (text.isEmpty()) it.greeting else text + "\n" + it.greeting }
         return text
     }
 
     private fun statusLine(state: PetState, now: Long): String {
         if (state.isFarewell(now)) {
             val who = state.farewellName.ifEmpty { state.farewellForm?.label ?: "YOUR PET" }
-            return "$who IS OFF ON AN ADVENTURE!"
+            return if (state.farewellEarly) "$who HAS PACKED ITS BAG AND LEFT EARLY..." else "$who IS OFF ON AN ADVENTURE!"
         }
         if (state.isGrowing(now)) {
             return if (state.stage(now) == Stage.BABY) "IT'S HATCHING!" else "GROWING UP... IT'S A ${state.name(now)}!"
@@ -426,11 +455,12 @@ class MainActivity : Activity() {
             return "EGG  ·  HATCHING IN ${left / 60}:${"%02d".format(left % 60)}"
         }
         val mood = Status.moodWord(state, now)
-        return "${state.name(now)}  ·  DAY ${state.day(now)}  ·  $mood"
+        return "${state.name(now)}  ·  $mood"
     }
 
     companion object {
         private const val PERMISSIONS_REQUEST = 1
+        private const val NOTIFICATIONS_REQUEST = 2
         private const val MAX_NAME = 8
         private const val POKE_MS = 1_500L
         private const val HOLD_MS = 450L

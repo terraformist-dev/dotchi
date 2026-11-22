@@ -104,4 +104,23 @@ request; don't re-add it. `MainActivity.removeOldLockScreenCard` cleans up after
   (lick lips, hop, tidy shake, yawn, look around). Album shows trait once adult and for past pets.
   Rare 7th form `FLIT` (code 7): child walked `RARE_STEPS` (45k) or met `RARE_FRIENDS` (4) and neglect
   within BUD's limit (`childSteps`/`childFriends` saved).
+- Build 25:
+  - UI: main screen = name, white mood line (`status`), grey today line (`today`: day, steps, weather,
+    season), pet centred in remaining space, care buttons, GUIDE/ALBUM/MEET as plain text links, daycare.
+    START OVER moved to the bottom of the Album (press-and-hold + confirm). Guide/Album use
+    `UiBits.pageWithBack` (BACK fixed at the bottom); Meet/Game have a boxed BACK at the bottom.
+    Haptics: CONFIRM/REJECT on care buttons and game results, CLOCK_TICK on tapping Dotchi.
+    Album shows `PetScene.portraitOf` (your Dotchi with markings) at the top.
+  - Busy: `PetState.isBusy` (any action/reaction within `ACTION_PAUSE_MS`, growing, farewell) blocks
+    every button (app, widget, Glyph); all labels fade.
+  - Leaving early: `frailMs` grows while awake (not night/daycare) when sick && food < STARVING, recovers
+    2x when not. 12h frail (dimmer), 24h packs a bag (`Art.BINDLE`), 32h leaves (`leftEarlyAt`,
+    `farewellEarly`; sad farewell; Album "LEFT EARLY").
+  - `Departures`: one notification when a pet leaves (owner asked; POST_NOTIFICATIONS asked once). Alarm at
+    `departsAt()` (hourly while frail) to `PetWidgetProvider` (`Departures.ACTION`); sent from
+    `PetStore.current` when the departure is recorded; skipped while the main screen is open.
+  - Games: STOP THE DOT and PEEKABOO added to `GameActivity` (4-game menu, 40ms loop).
+  - Meet: friends are per Dotchi (`Friends.petId` = phone id mixed with `bornAt`), "met before" is per
+    pair (my pet, their pet), Album count = distinct Dotchi ids; grown-up message when their form code
+    changed since this pair last met. Meeting scene loops hello -> catch over heads -> jumping (8s).
 - Too much of a good thing (build 14): feeding at food >= 90 = overeating (no food gain, -5 joy, next mess in 20 min and bigger via `extraMess`, STUFFED reaction). An over-play cooldown (played out, head shake) was removed in build 18 at the owner's request: it got in the way when shakes happen naturally while carrying the phone. Don't re-add it.

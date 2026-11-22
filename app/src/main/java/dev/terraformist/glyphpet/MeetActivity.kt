@@ -71,7 +71,7 @@ class MeetActivity : Activity() {
             if (data.size < PAYLOAD_SIZE || data[0] != MAGIC_0 || data[1] != MAGIC_1 || data[2] != VERSION) return
             val id = ((data[4].toInt() and 0xFF) shl 24) or ((data[5].toInt() and 0xFF) shl 16) or
                 ((data[6].toInt() and 0xFF) shl 8) or (data[7].toInt() and 0xFF)
-            if (id == Friends.myId(this@MeetActivity)) return
+            if (id == Friends.petId(this@MeetActivity, PetStore.get(this@MeetActivity))) return
             if (result.rssi < CLOSE_RSSI) return // too far away: hold the phones closer
             val name = cleanName(String(data, PAYLOAD_SIZE, data.size - PAYLOAD_SIZE, Charsets.US_ASCII))
             handler.post { onFriendNearby(id, data[3].toInt(), name) }
@@ -149,7 +149,7 @@ class MeetActivity : Activity() {
         try {
             val now = System.currentTimeMillis()
             val code = PetScene.formCode(PetStore.get(this, now), now)
-            val id = Friends.myId(this)
+            val id = Friends.petId(this, PetStore.get(this, now))
             val payload = byteArrayOf(
                 MAGIC_0, MAGIC_1, VERSION, code.toByte(),
                 (id ushr 24).toByte(), (id ushr 16).toByte(), (id ushr 8).toByte(), id.toByte(),
@@ -205,16 +205,15 @@ class MeetActivity : Activity() {
 
         // Their pet's own name if it has one, otherwise what kind it is (PIP, NOVA...).
         val name = friendName.ifEmpty { PetScene.nameForCode(code) }
-        message = when (Friends.met(this, id, code, now, friendName)) {
-            Friends.Meeting.NEW_FRIEND -> {
-                PetStore.metFriend(this, now)
-                "YOU MET $name! A NEW FRIEND. YOUR PET IS DELIGHTED."
-            }
-            Friends.Meeting.FIRST_TODAY -> {
-                PetStore.metFriend(this, now)
-                "$name IS BACK! YOUR PET IS HAPPY TO SEE THEM."
-            }
-            Friends.Meeting.AGAIN_TODAY -> "$name SAYS HELLO AGAIN. (THE HAPPINESS BOOST IS ONCE A DAY.)"
+        val meeting = Friends.met(this, Friends.petId(this, PetStore.get(this, now)), id, code, now, friendName)
+        if (meeting.isNew || meeting.firstToday) PetStore.metFriend(this, now)
+        message = when {
+            meeting.isNew -> "YOU MET $name! A NEW FRIEND. YOUR PET IS DELIGHTED."
+            meeting.grown && meeting.firstToday ->
+                "$name IS BACK, AND HAS GROWN! YOUR PET HAS NEVER SEEN THEM LOOK LIKE THIS BEFORE."
+            meeting.grown -> "$name HAS GROWN! YOUR PET HAS NEVER SEEN THEM LOOK LIKE THIS BEFORE."
+            meeting.firstToday -> "$name IS BACK! YOUR PET IS HAPPY TO SEE THEM."
+            else -> "$name SAYS HELLO AGAIN. (THE HAPPINESS BOOST IS ONCE A DAY.)"
         }
     }
 
@@ -257,16 +256,25 @@ class MeetActivity : Activity() {
     }
 }
 
-/** The friends this pet has met, kept on this phone. */
+/**
+ * The friends met, kept on this phone. Every Dotchi has its own id (a new egg gets a new one), so
+ * each pet is a friend in its own right: your new Dotchi hasn't met anyone yet, and someone's
+ * new Dotchi is a new friend even if you knew their last one.
+ */
 object Friends {
-    enum class Meeting { NEW_FRIEND, FIRST_TODAY, AGAIN_TODAY }
+    /** How a meeting went: a brand new friend, the first visit today, and whether they've grown since last time. */
+    class Meeting(val isNew: Boolean, val firstToday: Boolean, val grown: Boolean)
 
     private const val PREFS = "friends"
 
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** A random number identifying this phone's pet to others. Made once. */
-    fun myId(context: Context): Int {
+    /** The id other phones see for this Dotchi: this phone's number mixed with when its egg was laid. */
+    fun petId(context: Context, state: PetState): Int =
+        (PetState.mix(myId(context).toLong() xor state.bornAt) ushr 32).toInt()
+
+    /** A random number for this phone. Made once. */
+    private fun myId(context: Context): Int {
         val p = prefs(context)
         if (p.contains("myId")) return p.getInt("myId", 0)
         val id = Random.nextInt()
@@ -276,24 +284,29 @@ object Friends {
 
     fun count(context: Context): Int = prefs(context).getStringSet("ids", emptySet())?.size ?: 0
 
-    fun met(context: Context, id: Int, code: Int, now: Long, name: String = ""): Meeting {
+    /**
+     * Record that [mine] (this phone's current Dotchi) met [theirs]. "Met before" is about these
+     * two pets; the Album's count is every different Dotchi this phone's pets have met.
+     */
+    fun met(context: Context, mine: Int, theirs: Int, code: Int, now: Long, name: String = ""): Meeting {
         val p = prefs(context)
         val ids = p.getStringSet("ids", emptySet())?.toMutableSet() ?: mutableSetOf()
-        val key = id.toString()
+        val pair = "${mine}_$theirs"
         val today = PetState.epochDay(now)
-        val lastDay = p.getLong("day_$key", -1L)
-        val result = when {
-            key !in ids -> Meeting.NEW_FRIEND
-            lastDay != today -> Meeting.FIRST_TODAY
-            else -> Meeting.AGAIN_TODAY
-        }
-        ids += key
+        val metBefore = p.contains("pairDay_$pair")
+        val lastDay = p.getLong("pairDay_$pair", -1L)
+        val lastCode = p.getInt("pairCode_$pair", code)
+        ids += theirs.toString()
         p.edit()
             .putStringSet("ids", ids)
-            .putLong("day_$key", today)
-            .putInt("code_$key", code)
-            .putString("name_$key", name)
+            .putLong("pairDay_$pair", today)
+            .putInt("pairCode_$pair", code)
+            .putString("name_$theirs", name)
             .apply()
-        return result
+        return Meeting(
+            isNew = !metBefore,
+            firstToday = metBefore && lastDay != today,
+            grown = metBefore && lastCode != code,
+        )
     }
 }

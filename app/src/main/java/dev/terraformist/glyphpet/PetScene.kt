@@ -287,6 +287,14 @@ private object Art {
         "##",
         "##",
     )
+
+    // A little bag on a stick: packed, ready to leave.
+    val BINDLE = Sprite(
+        "##..",
+        "###.",
+        "..#.",
+        "...#",
+    )
     val SPARK = Sprite(
         ".#.",
         "###",
@@ -394,7 +402,12 @@ object PetScene {
                 g, body, mood, anim, animate, look, greeting, waking,
                 season = season, growing = growing, medicine = medicine, touch = touch,
                 trait = if (moodOverride == null) state.trait else null, markings = state.markings,
+                frail = if (moodOverride == null) state.frailStage() else 0,
             )
+            // Badly neglected for a long time: it has packed a little bag.
+            if (moodOverride == null && state.frailStage() >= 2) {
+                g.stamp(Art.BINDLE, CENTER_X + body.sprite.width / 2 + 2, FEET_Y - Art.BINDLE.height + 1, level = 200)
+            }
             // Hatching: the egg bursts into light, which fades out from the middle.
             if (stage == Stage.BABY && growing in 0f..HATCH_FLASH) drawHatchFlash(g, growing / HATCH_FLASH)
         }
@@ -463,12 +476,17 @@ object PetScene {
         val g = DotGrid(SIZE, SIZE)
         val p = ((now - state.cutsceneAt).toFloat() / PetState.FAREWELL_MS).coerceIn(0f, 1f)
         val walk = ((p - 0.35f) / 0.5f).coerceIn(0f, 1f)
-        val body = Art.body(Stage.ADULT, state.farewellForm ?: Form.GLOOP)
+        val early = state.farewellEarly
+        // Left early: whatever it had grown into, trudging off sadly with its little bag.
+        val body = if (early) Art.body(state.farewellForm?.stage ?: Stage.BABY, state.farewellForm)
+        else Art.body(Stage.ADULT, state.farewellForm ?: Form.GLOOP)
+        val centerX = CENTER_X + (walk * 20).toInt()
         drawPet(
-            g, body, if (walk > 0f) Mood.WALKING else Mood.HAPPY, anim, animate = true,
-            look = if (walk > 0f) 1 else 0, waving = walk == 0f, waking = -1f,
-            centerX = CENTER_X + (walk * 20).toInt(), season = season,
+            g, body, if (early) Mood.SAD else if (walk > 0f) Mood.WALKING else Mood.HAPPY, anim, animate = true,
+            look = if (walk > 0f) 1 else 0, waving = !early && walk == 0f, waking = -1f,
+            centerX = centerX, season = if (early) null else season, frail = if (early) 1 else 0,
         )
+        if (early) g.stamp(Art.BINDLE, centerX + body.sprite.width / 2 + 1, FEET_Y - body.sprite.height, level = 200)
         if (p > 0.65f) {
             val level = (((p - 0.65f) / 0.25f).coerceIn(0f, 1f) * 255).toInt().coerceAtLeast(40)
             g.stamp(Art.EGG, CENTER_X - Art.EGG.width / 2, FEET_Y - Art.EGG.height + 1, level)
@@ -521,6 +539,20 @@ object PetScene {
         return g
     }
 
+    /** Your own Dotchi as it looks now, markings and all (for the top of the Album). */
+    fun portraitOf(state: PetState, now: Long): DotGrid {
+        val g = DotGrid(15, 15)
+        if (state.stage(now) == Stage.EGG) {
+            g.stamp(Art.EGG, 7 - Art.EGG.width / 2, 13 - Art.EGG.height + 1)
+        } else {
+            drawPet(g, Art.body(state.stage(now), state.form(now)), Mood.HAPPY, 0L, animate = false, look = 0,
+                waving = false, waking = -1f, centerX = 7, feetY = 13, markings = state.markings,
+                frail = state.frailStage())
+        }
+        for (x in 1 until 15 step 2) g.set(x, 14, 30)
+        return g
+    }
+
     // ---- Meeting another Dotchi -------------------------------------------------------
 
     /** A one-byte code for which pet this is, sent to other phones when meeting. */
@@ -549,6 +581,7 @@ object PetScene {
 
     const val MEET_WIDTH = 37 // room for an adult friend's waving hand
     const val MEET_HEIGHT = 21
+    private const val MEET_CYCLE_MS = 8_000L
 
     /**
      * Two pets side by side: yours on the left facing right, your friend on the right facing
@@ -571,13 +604,56 @@ object PetScene {
             return g
         }
 
+        // Together: they say hello, play catch over each other's heads, then jump about together.
+        val friend = bodyForCode(friendCode)
+        val myX = 9
+        val friendX = MEET_WIDTH - 12
+        val cycle = anim % MEET_CYCLE_MS
+        var myLift = 0
+        var friendLift = 0
+        var waving = false
+        var hearts = false
+        var ball: Pair<Int, Int>? = null
+        when {
+            cycle < 2_000L -> {
+                waving = true // hello!
+                hearts = true
+            }
+            cycle < 6_000L -> {
+                // Catch: the ball arcs over their heads, back and forth, once a second.
+                val t = cycle - 2_000L
+                val toFriend = (t / 1_000L) % 2 == 0L
+                val p = (t % 1_000L) / 1_000f
+                val fromX = if (toFriend) myX else friendX
+                val toX = if (toFriend) friendX else myX
+                val headTop = minOf(feet - mine.sprite.height, feet - friend.sprite.height)
+                val base = (headTop - 1).coerceAtLeast(2)
+                val bx = fromX + ((toX - fromX) * p).roundToInt() - 1
+                val by = base - (sin(Math.PI * p) * (base - 1)).roundToInt()
+                ball = bx to by
+                // A little hop to throw it, and a bigger one to catch it.
+                val throwHop = if (p < 0.15f) 1 else 0
+                val catchHop = if (p > 0.85f) 2 else 0
+                if (toFriend) { myLift = throwHop; friendLift = catchHop } else { friendLift = throwHop; myLift = catchHop }
+            }
+            else -> {
+                // Jumping about together, with hearts.
+                val up = ((cycle - 6_000L) / 250L) % 2 == 0L
+                myLift = if (up) 2 else 0
+                friendLift = if (up) 0 else 2
+                hearts = true
+            }
+        }
         drawPet(g, mine, Mood.HAPPY, anim, animate = true, look = 1, waving = false, waking = -1f,
-            centerX = 9, feetY = feet, markings = state.markings)
-        drawPet(g, bodyForCode(friendCode), Mood.HAPPY, anim + 250, animate = true, look = -1,
-            waving = true, waking = -1f, centerX = MEET_WIDTH - 12, feetY = feet)
-        // Hearts drifting up between them.
-        val rise = ((anim / 300) % 4).toInt()
-        g.stamp(Art.HEART, MEET_WIDTH / 2 - 2, 4 - rise.coerceAtMost(3), red = true)
+            centerX = myX, feetY = feet - myLift, markings = state.markings)
+        drawPet(g, friend, Mood.HAPPY, anim + 250, animate = true, look = -1,
+            waving = waving, waking = -1f, centerX = friendX, feetY = feet - friendLift)
+        ball?.let { (bx, by) -> g.stamp(Art.HAND, bx, by) }
+        if (hearts) {
+            // Hearts drifting up between them.
+            val rise = ((anim / 300) % 4).toInt()
+            g.stamp(Art.HEART, MEET_WIDTH / 2 - 2, 4 - rise.coerceAtMost(3), red = true)
+        }
         return g
     }
 
@@ -725,6 +801,7 @@ object PetScene {
         touch: Touch? = null,
         trait: Trait? = null,
         markings: Int? = null,
+        frail: Int = 0,
     ) {
         val sprite = body.sprite
         val tk = touch?.kind
@@ -791,7 +868,9 @@ object PetScene {
             val ill = !flicker && (mood == Mood.SICK || (wave && y > front))
             val base = if (ill) (120 + 50 * illShimmer(x, y, t)).roundToInt() else level
             val shade = if (flicker) 1f else shading(sprite, x, y)
-            g.set(left + x, top + y, (base * shade).roundToInt())
+            // Frail: its glow has faded a little.
+            val weak = if (frail >= 1) 0.75f else 1f
+            g.set(left + x, top + y, (base * shade * weak).roundToInt())
         }
         // Its own markings: a few dimmer dots that make it look like no other Dotchi.
         if (!flicker && markings != null) {

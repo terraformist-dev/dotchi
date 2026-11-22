@@ -1,20 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Main screen: the name, how it is, then the pet centred in the space that's left, with the
+  three care buttons under it. Guide / Album / Meet are quiet text links so the care buttons
+  stand out. (Starting over lives at the bottom of the Album now.)
+-->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
+    android:fillViewport="true"
     android:fitsSystemWindows="true">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:paddingStart="16dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp">
 
         <ImageView
             android:id="@+id/title"
             android:layout_width="wrap_content"
             android:layout_height="28dp"
+            android:layout_marginStart="4dp"
             android:adjustViewBounds="true"
             android:contentDescription="@string/app_name"
             android:scaleType="fitStart" />
@@ -23,31 +33,49 @@
             android:id="@+id/status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
             android:layout_marginTop="12dp"
             android:fontFamily="monospace"
             android:letterSpacing="0.1"
-            android:textColor="#9A9A9A"
+            android:textColor="#FFFFFF"
             android:textSize="13sp" />
 
-        <ImageView
-            android:id="@+id/pet"
+        <TextView
+            android:id="@+id/today"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:adjustViewBounds="true"
-            android:contentDescription="@string/app_name"
-            android:scaleType="fitCenter" />
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="4dp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1"
+            android:textColor="#8A8A8A"
+            android:textSize="12sp" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="200dp">
+
+            <ImageView
+                android:id="@+id/pet"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:adjustViewBounds="true"
+                android:contentDescription="@string/app_name"
+                android:scaleType="fitCenter" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
             android:orientation="horizontal">
 
             <ImageView
                 android:id="@+id/btn_feed"
                 android:layout_width="0dp"
-                android:layout_height="60dp"
+                android:layout_height="64dp"
                 android:layout_weight="1"
                 android:background="@drawable/button_bg"
                 android:contentDescription="Feed"
@@ -57,7 +85,7 @@
             <ImageView
                 android:id="@+id/btn_play"
                 android:layout_width="0dp"
-                android:layout_height="60dp"
+                android:layout_height="64dp"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:background="@drawable/button_bg"
@@ -68,7 +96,7 @@
             <ImageView
                 android:id="@+id/btn_clean"
                 android:layout_width="0dp"
-                android:layout_height="60dp"
+                android:layout_height="64dp"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:background="@drawable/button_bg"
@@ -80,73 +108,55 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/guide"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
+                android:layout_height="48dp"
                 android:layout_weight="1"
-                android:background="@drawable/button_bg"
                 android:fontFamily="monospace"
                 android:gravity="center"
                 android:letterSpacing="0.2"
                 android:text="@string/guide_button"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                android:textColor="#BDBDBD"
+                android:textSize="13sp" />
 
             <TextView
                 android:id="@+id/album"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="48dp"
                 android:layout_weight="1"
-                android:background="@drawable/button_bg"
                 android:fontFamily="monospace"
                 android:gravity="center"
                 android:letterSpacing="0.2"
                 android:text="@string/album_button"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                android:textColor="#BDBDBD"
+                android:textSize="13sp" />
 
             <TextView
                 android:id="@+id/meet"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="48dp"
                 android:layout_weight="1"
-                android:background="@drawable/button_bg"
                 android:fontFamily="monospace"
                 android:gravity="center"
                 android:letterSpacing="0.2"
                 android:text="@string/meet_button"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                android:textColor="#BDBDBD"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/daycare"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
             android:fontFamily="monospace"
+            android:gravity="center"
+            android:minHeight="40dp"
             android:padding="8dp"
-            android:textColor="#9A9A9A"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/reset"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:fontFamily="monospace"
-            android:padding="8dp"
-            android:text="@string/reset_label"
-            android:textColor="#D71921"
+            android:textColor="#8A8A8A"
             android:textSize="12sp" />
     </LinearLayout>
 </ScrollView>
